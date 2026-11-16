@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Noncompliance{% endblock %}
+{% block content %}
+<header class="head"><div><h1>Possible noncompliance</h1>
+<p class="sub">When something was a real miss, record what happened, the cause, the risk, the mitigation and what you reported. Whether and how to self-report is your decision; this keeps the record straight. Exported in the audit package.</p></div></header>
+<div class="grid g2">
+<div>
+{% if rows %}<table><tr><th>#</th><th>Item</th><th>Risk</th><th>Reporting</th><th>Status</th></tr>
+{% for x in rows %}<tr><td class="num">{{ x.id }}</td><td><a href="/noncompliance/{{ x.id }}"><b>{{ x.title }}</b></a><div class="small muted">{{ x.requirement.code }} · found {{ x.discovered_on }}{% set open_steps = x.steps|rejectattr('completed_on')|list %}{% if open_steps %} · {{ open_steps|length }} open step(s){% endif %}</div></td>
+<td>{{ pill(x.risk, {'Minimal':'ok','Moderate':'warn','Serious':'bad'}[x.risk]) if x.risk else pill('not assessed','neutral') }}</td>
+<td class="small">{{ x.disposition }}</td><td>{{ pill(x.status, {'Open':'bad','Mitigating':'warn','Closed':'ok'}[x.status]) }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">Nothing recorded. That's the goal.</div>{% endif %}
+</div>
+{% if user.role != 'viewer' %}
+<div class="card"><div class="card-head"><h2>Record a possible noncompliance</h2></div>
+<form method="post" class="stack">{{ csrf_field() }}
+{% if finding %}<input type="hidden" name="finding_id" value="{{ finding.id }}"><p class="small">From finding: <b>{{ finding.title }}</b></p>{% endif %}
+<label>Requirement</label><select name="requirement_id">{% for r in reqs %}<option value="{{ r.id }}" {{ 'selected' if finding and finding.requirement_code == r.code }}>{{ r.code }} — {{ r.title }}</option>{% endfor %}</select>
+<label>Title</label><input type="text" name="title" required value="{{ finding.title if finding else '' }}">
+<label>What happened</label><textarea name="description" required>{{ finding.detail if finding else '' }}</textarea>
+<div class="row"><div><label>Found on</label><input type="date" name="discovered_on" required value="{{ today }}"></div>
+<div><label>How it was found</label><select name="discovered_how">{% for h in how %}<option {{ 'selected' if finding and h == 'PrismCIP finding' }}>{{ h }}</option>{% endfor %}</select></div></div>
+<div class="actions"><button>Record</button></div></form></div>
+{% endif %}
+</div>
+{% endblock %}

@@ -14,6 +14,7 @@
   {% if x.detail %}<p class="small m0">{{ x.detail }}</p>{% endif %}
   {% if x.status == 'Resolved' %}<p class="small muted m0">Resolved by {{ x.resolved_by }} {{ x.resolved_at.strftime('%Y-%m-%d') }}: {{ x.resolution }}</p>
   {% elif user.role != 'viewer' %}
+  <p class="small m0"><a href="/noncompliance?finding={{ x.id }}">Record as possible noncompliance</a></p>
   <form method="post" action="/findings/{{ x.id }}/resolve">{{ csrf_field() }}<input type="text" name="resolution" placeholder="What was done, or why it's acceptable (e.g. emergency access, approved by phone, ticket #)" required><button class="secondary">Resolve</button></form>
   {% endif %}
 </div>

@@ -1,4 +1,4 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
 {% block title %}{{ req.code }}{% endblock %}
 {% block content %}
 <p class="small"><a href="/requirements">← Requirements</a></p>
@@ -13,13 +13,38 @@
 </dl>
 {% if st.gaps %}<h3>Gaps found in your records</h3><ul class="gaps">{% for g in st.gaps %}<li>{{ g }}</li>{% endfor %}</ul>{% endif %}
 </div>
+{% if st.na %}
+<div class="card s6"><div class="card-head"><h2>Not applicable</h2>{{ pill('N/A', 'ok') }}</div>
+<p class="small m0">{{ st.na.reason }}</p>
+<p class="small muted">Recorded {{ st.na.decided_at.strftime('%Y-%m-%d') }} by {{ st.na.decided_by }}. The decision record is in the evidence below.</p>
+{% if user.role != 'viewer' %}<form method="post" action="/requirements/{{ req.id }}/na/withdraw" data-confirm="Withdraw not-applicable? The requirement will need evidence again.">{{ csrf_field() }}<button class="secondary">Withdraw N/A</button></form>{% endif %}
+</div>
+{% elif na_allowed and user.role != 'viewer' %}
+<details class="card"><summary><b>Doesn't apply to you?</b> <span class="small muted">Mark it not applicable with a reason, e.g. {{ na_allowed }}.</span></summary>
+<form method="post" action="/requirements/{{ req.id }}/na" class="stack mt1">{{ csrf_field() }}
+<label>Why it doesn't apply <span class="hint">auditors read this; be specific</span></label>
+<textarea name="reason" required minlength="15" placeholder="e.g. None of our three assets allows vendor electronic remote access; vendors work on site, escorted. Reviewed with the CIP Senior Manager."></textarea>
+<div class="actions"><button class="secondary">Mark not applicable</button></div></form></details>
+{% endif %}
 <h2>Evidence on file</h2>
-{% for e in evidence %}<div class="card"><div class="head"><div><b>{{ e.title }}</b>
+{% for e in evidence %}<div class="card"><div class="head"><div><b>{{ e.title }}</b> {% if e.locked_at %}<span class="pill neutral" title="{{ e.locked_reason }}">{{ icon('lock', 12, 2) }} Locked</span>{% endif %}
 <div class="small muted">Performed {{ e.performed_on }}{% if e.asset %} · {{ e.asset.name }}{% endif %} · added by {{ e.uploaded_by }}</div></div>
-{% if user.role != 'viewer' %}<form method="post" action="/evidence/{{ e.id }}/delete" data-confirm="Delete this evidence? The deletion is logged.">{{ csrf_field() }}<button class="secondary">Delete</button></form>{% endif %}</div>
+{% if user.role != 'viewer' and not e.locked_at %}<form method="post" action="/evidence/{{ e.id }}/delete" data-confirm="Delete this evidence? The deletion is logged.">{{ csrf_field() }}<button class="secondary">Delete</button></form>{% endif %}</div>
 {% if e.description %}<p class="small">{{ e.description }}</p>{% endif %}
 {% if e.stored_name %}<p class="small"><a href="/evidence/{{ e.id }}/download">{{ e.file_name }}</a> <span class="mono muted">sha256 {{ e.sha256[:16] }}…</span></p>{% endif %}
+{% if e.locked_at %}<p class="small muted m0">{{ e.locked_reason }} — it can be replaced with a newer version but not deleted.</p>{% endif %}
+{% if user.role != 'viewer' %}
+<details class="mt1"><summary class="small">Replace with a newer version</summary>
+<form method="post" action="/evidence/{{ e.id }}/supersede" enctype="multipart/form-data" class="stack">{{ csrf_field() }}
+<label>Why it's being replaced</label><input type="text" name="note" required placeholder="e.g. Wrong file attached; corrected date">
+<div class="row"><div><label>Title</label><input type="text" name="title" value="{{ e.title }}"></div><div><label>Date performed</label><input type="date" name="performed_on" value="{{ e.performed_on }}"></div></div>
+<label>File</label><input type="file" name="file">
+<div class="actions"><button class="secondary">Replace</button></div></form></details>
+{% endif %}
 </div>{% else %}<div class="card muted">No evidence yet.</div>{% endfor %}
+{% if replaced %}<details class="card"><summary class="small"><b>{{ replaced|length }} replaced version(s)</b> <span class="muted">kept for the record</span></summary>
+{% for e in replaced %}<div class="req-line small"><s>{{ e.title }}</s> · {{ e.performed_on }} · replaced {{ e.superseded_at.strftime('%Y-%m-%d') }}: {{ e.superseded_note }}
+{% if e.stored_name %} · <a href="/evidence/{{ e.id }}/download">{{ e.file_name }}</a>{% endif %}</div>{% endfor %}</details>{% endif %}
 </div>
 {% if user.role != 'viewer' %}
 <div class="card"><h2 class="mt0">Add evidence</h2>

@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Offboard {{ v.name }}{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/vendors/{{ v.id }}">← {{ v.name }}</a></p>
+<header class="head"><div><h1>Offboard {{ v.name }}</h1>
+<p class="sub">When a contract ends: shut off every path, close the loose ends, and file the record as Section 6.2 evidence.{% if v.contract_end %} Contract ends {{ v.contract_end }}.{% endif %}</p></div>
+<div class="head-actions">{{ pill(v.status, {'Active':'neutral','Offboarding':'warn','Offboarded':'ok'}[v.status]) }}
+{% if v.status == 'Active' and user.role != 'viewer' %}<form method="post" class="inline">{{ csrf_field() }}<input type="hidden" name="action" value="start"><button>Start offboarding</button></form>{% endif %}</div></header>
+<div class="grid g2">
+<div class="card"><div class="card-head"><h2>Checked automatically</h2></div>
+{% for a in autos %}<div class="req-line">{{ pill('✓', 'ok') if a.ok else pill('✗', 'bad') }} {{ a.label }} <span class="small muted">{{ a.detail }}</span></div>{% endfor %}
+{% if user.role != 'viewer' and v.status != 'Offboarded' and not autos|selectattr('ok')|list|length == autos|length %}
+<form method="post" class="actions" data-confirm="Disable every path, end open sessions, revoke windows and the portal link for {{ v.name }}?">{{ csrf_field() }}<input type="hidden" name="action" value="disable_all"><button class="danger solid">Shut off all access</button></form>{% endif %}
+</div>
+<div class="card"><div class="card-head"><h2>Confirm by hand</h2></div>
+{% for s in steps %}<div class="req-line">{% if s.step and s.step.done_at %}{{ pill('✓','ok') }} {{ s.label }}<div class="small muted">{{ s.step.done_by }} · {{ s.step.done_at.strftime('%Y-%m-%d') }}{{ ' · ' ~ s.step.note if s.step.note }}</div>
+{% else %}{{ pill('to do','warn') }} {{ s.label }}
+{% if user.role != 'viewer' and v.status != 'Offboarded' %}<form method="post" class="finding-form">{{ csrf_field() }}<input type="hidden" name="action" value="step"><input type="hidden" name="key" value="{{ s.key }}"><input type="text" name="note" placeholder="How / reference (optional)"><button class="secondary small-btn">Done</button></form>{% endif %}{% endif %}</div>{% endfor %}
+</div></div>
+<div class="card"><div class="card-head"><h2>Contract</h2></div>
+<form method="post" class="row">{{ csrf_field() }}<input type="hidden" name="action" value="contract"><div><label>Contract end <span class="hint">reminders start 30 days before</span></label><input type="date" name="contract_end" value="{{ v.contract_end or '' }}"></div><div><button class="secondary">Save</button></div></form></div>
+{% if v.status == 'Offboarding' and user.role != 'viewer' %}<form method="post" class="actions">{{ csrf_field() }}<input type="hidden" name="action" value="complete"><button>Complete offboarding</button></form>{% endif %}
+{% endblock %}

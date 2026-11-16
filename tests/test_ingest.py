@@ -176,3 +176,110 @@ def test_vendor_portal_request_and_approval(admin):
     _post(c, f"/vendors/{vid}/portal", dict(action="revoke"), page=f"/vendors/{vid}")
     with TestClient(app) as vendor:
         assert vendor.get(f"/portal/{link}").status_code == 404
+
+
+def test_globalprotect_parse_times_and_skips():
+    r = parse_csv  # noqa: F841  (keep import used)
+    from app.ingest import parse_globalprotect
+    res = parse_globalprotect((SAMPLES / "globalprotect_events.log").read_text())
+    assert res.lines == 5 and res.skipped == 2  # portal-auth and a failed connect
+    first = res.records[0]
+    assert first.account == "scada-integrator" and first.started_at == datetime(2026, 11, 3, 16, 0)
+    assert first.ended_at == datetime(2026, 11, 3, 17, 30)
+
+
+def test_panos_rule_review_and_dtd_refusal():
+    from app.fwreview import parse_any, review
+    brand, rules = parse_any((SAMPLES / "panos_running_config.xml").read_text())
+    issues = review(rules)
+    assert brand == "PAN-OS" and sum(i.severity == "high" for i in issues) == 1
+    assert not any("SCADA-to-RTU" in i.rule for i in issues) and not any("old-disabled" in i.rule for i in issues)
+    evil = ('<?xml version="1.0"?><!DOCTYPE c [<!ENTITY x "y">]><config><rulebase><security><rules>'
+            '</rules></security></rulebase></config>')
+    with pytest.raises(ValueError):
+        parse_any(evil)
+
+
+def test_syslog_cross_batch_pairing_and_sender_filter():
+    from app import syslog
+    from app.models import Vendor, VendorAccess
+    sources = syslog.parse_sources("10.9.9.9, 10.8.0.0/16")
+    with SessionLocal() as db:
+        path = db.query(VendorAccess).join(Vendor).filter(Vendor.name == "Relay Pros (ingest)").first()
+        org_id, pid = path.org_id, path.id
+        before = db.query(AccessSession).filter_by(access_id=pid).count()
+    up = ('date=2026-12-02 time=15:00:00 tz="+0000" logid="0101039947" type="event" subtype="vpn" '
+          'action="tunnel-up" tunneltype="ssl-tunnel" tunnelid=777 user="relaypros-jalvarez" remip=203.0.113.24')
+    down = ('date=2026-12-02 time=15:40:00 tz="+0000" logid="0101039948" type="event" subtype="vpn" '
+            'action="tunnel-down" tunneltype="ssl-tunnel" tunnelid=777 user="relaypros-jalvarez" '
+            'remip=203.0.113.24 duration=2400')
+    syslog.accept("192.0.2.1", up, sources, org_id)  # not a listed sender
+    syslog.accept("10.8.3.4", "some unrelated firewall traffic log", sources, org_id)
+    assert syslog.stats["dropped_sender"] >= 1 and syslog.stats["irrelevant"] >= 1
+    syslog.accept("10.9.9.9", up, sources, org_id)
+    syslog.flush()
+    with SessionLocal() as db:
+        s = db.query(AccessSession).filter_by(access_id=pid).order_by(AccessSession.id.desc()).first()
+        assert s.ended_at is None and db.query(AccessSession).filter_by(access_id=pid).count() == before + 1
+    syslog.accept("10.8.1.1", down, sources, org_id)  # the end arrives later, from another listed sender
+    syslog.flush()
+    with SessionLocal() as db:
+        assert db.query(AccessSession).filter_by(access_id=pid).count() == before + 1  # closed, not duplicated
+        s = db.get(AccessSession, s.id)
+        assert s.ended_at == datetime(2026, 12, 2, 15, 40)
+
+
+@pytest.mark.skipif("postgres" in __import__("os").environ.get("PRISMCIP_DATABASE_URL", ""), reason="copies the SQLite install")
+def test_live_udp_listener_end_to_end(tmp_path):
+    import os
+    import socket
+    import sqlite3
+    import subprocess
+    import sys
+    import time
+    import urllib.request
+    from app import backup
+    data = tmp_path / "data"
+    backup.restore(backup.create(tmp_path, passphrase=""), data, passphrase="")  # a copy of the test install
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    web = s.getsockname()[1]
+    s.close()
+    u = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    u.bind(("127.0.0.1", 0))
+    sport = u.getsockname()[1]
+    u.close()
+    con = sqlite3.connect(data / "prismcip.db")
+    org_id = con.execute("SELECT org_id FROM vendor_access WHERE accounts LIKE '%relaypros-jalvarez%'").fetchone()[0]
+    con.close()
+    env = dict(os.environ, PRISMCIP_DATA_DIR=str(data), PRISMCIP_SYSLOG_PORT=str(sport),
+               PRISMCIP_SYSLOG_HOST="127.0.0.1", PRISMCIP_SYSLOG_SOURCES=f"127.0.0.1={org_id}",
+               PRISMCIP_REMINDERS="off", PRISMCIP_BACKUPS="off")
+    proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "app.main:app", "--port", str(web)],
+                            cwd=SAMPLES.parent, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        for _ in range(60):
+            try:
+                urllib.request.urlopen(f"http://127.0.0.1:{web}/healthz", timeout=1)
+                break
+            except OSError:
+                time.sleep(0.25)
+        line = ('<190>date=2026-12-09 time=03:00:00 tz="+0000" logid="0101039947" type="event" subtype="vpn" '
+                'action="tunnel-up" tunneltype="ssl-tunnel" tunnelid=4242 user="relaypros-jalvarez" '
+                'remip=198.51.100.200')
+        c = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        c.sendto(line.encode(), ("127.0.0.1", sport))
+        c.close()
+        found = None
+        for _ in range(40):
+            time.sleep(0.5)
+            con = sqlite3.connect(data / "prismcip.db")
+            found = con.execute("SELECT source_ip FROM access_sessions WHERE source_ip='198.51.100.200'").fetchone()
+            nf = con.execute("SELECT count(*) FROM findings WHERE detail LIKE '%198.51.100.200%'").fetchone()[0]
+            con.close()
+            if found:
+                break
+        assert found and nf == 1  # arrived live, and it's unapproved so it became a finding
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)

@@ -1,0 +1,36 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Noncompliance #{{ x.id }}{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/noncompliance">← Noncompliance</a></p>
+<header class="head"><div><h1>#{{ x.id }} {{ x.title }}</h1><p class="sub">{{ x.requirement.code }} — {{ x.requirement.title }} · found {{ x.discovered_on }} ({{ x.discovered_how }}) · recorded by {{ x.created_by }}</p></div>
+<div class="head-actions">{{ pill(x.status, {'Open':'bad','Mitigating':'warn','Closed':'ok'}[x.status]) }}
+{% if user.role != 'viewer' %}<form method="post" action="/noncompliance/{{ x.id }}/status" class="inline">{{ csrf_field() }}<input type="hidden" name="action" value="{{ 'reopen' if x.status == 'Closed' else 'close' }}"><button class="secondary">{{ 'Reopen' if x.status == 'Closed' else 'Close' }}</button></form>{% endif %}</div></header>
+{% if finding %}<p class="small">Started from finding: <a href="/findings?show=all">{{ finding.title }}</a></p>{% endif %}
+<div class="grid g2">
+<form method="post" class="card stack">{{ csrf_field() }}
+<div class="card-head"><h2>Facts and assessment</h2></div>
+<label>Title</label><input type="text" name="title" value="{{ x.title }}">
+<label>What happened</label><textarea name="description">{{ x.description }}</textarea>
+<div class="row"><div><label>Found on</label><input type="date" name="discovered_on" value="{{ x.discovered_on }}"></div><div><label>How</label><select name="discovered_how">{% for h in how %}<option {{ 'selected' if h == x.discovered_how }}>{{ h }}</option>{% endfor %}</select></div></div>
+<div class="row"><div><label>Noncompliance began</label><input type="date" name="started_on" value="{{ x.started_on or '' }}"></div><div><label>Compliance restored</label><input type="date" name="ended_on" value="{{ x.ended_on or '' }}"></div></div>
+<div class="row"><div><label>Cause</label><select name="cause_category"><option value="">—</option>{% for c in causes %}<option {{ 'selected' if c == x.cause_category }}>{{ c }}</option>{% endfor %}</select></div>
+<div><label>Risk to the BES</label><select name="risk"><option value="">—</option>{% for r in risks %}<option {{ 'selected' if r == x.risk }}>{{ r }}</option>{% endfor %}</select></div></div>
+<label>Root cause</label><textarea name="root_cause" placeholder="Why it happened, not just what">{{ x.root_cause or '' }}</textarea>
+<label>Why that risk level</label><textarea name="risk_rationale" placeholder="e.g. Vendor session was to a single relay, monitored, no malicious activity seen">{{ x.risk_rationale or '' }}</textarea>
+<h3>Reporting</h3>
+<label>Decision</label><select name="disposition">{% for o in dispositions %}<option {{ 'selected' if o == x.disposition }}>{{ o }}</option>{% endfor %}</select>
+<div class="row"><div><label>Submitted on</label><input type="date" name="submitted_on" value="{{ x.submitted_on or '' }}"></div><div><label>Regional Entity reference</label><input type="text" name="tracking_id" value="{{ x.tracking_id or '' }}"></div></div>
+{% if user.role != 'viewer' and x.status != 'Closed' %}<div class="actions"><button>Save</button></div>{% endif %}
+</form>
+<div class="card"><div class="card-head"><h2>Mitigation</h2></div>
+{% for st in x.steps %}<div class="req-line"><div class="head"><div>{{ '✓ ' if st.completed_on }}<b>{{ st.text }}</b><div class="small muted">{{ st.owner or 'no owner' }}{% if st.due_on %} · due {{ st.due_on }}{% endif %}{% if st.completed_on %} · done {{ st.completed_on }}{% endif %}</div></div>
+<div>{% if st.completed_on %}{{ pill('Done','ok') }}{% elif st.due_on and st.due_on < today %}{{ pill('Overdue','bad') }}{% else %}{{ pill('Open','warn') }}{% endif %}
+{% if not st.completed_on and user.role != 'viewer' %}<form method="post" action="/noncompliance/{{ x.id }}/steps" class="inline">{{ csrf_field() }}<input type="hidden" name="complete" value="{{ st.id }}"><button class="secondary small-btn">Done</button></form>{% endif %}</div></div></div>
+{% else %}<p class="muted small">No steps yet.</p>{% endfor %}
+{% if user.role != 'viewer' and x.status != 'Closed' %}
+<form method="post" action="/noncompliance/{{ x.id }}/steps" class="stack mt1">{{ csrf_field() }}
+<label>Step</label><input type="text" name="text" required placeholder="e.g. Disable vendor VPN accounts between approved windows">
+<div class="row"><div><label>Owner</label><input type="text" name="owner"></div><div><label>Due</label><input type="date" name="due_on"></div></div>
+<div class="actions"><button class="secondary">Add step</button></div></form>{% endif %}
+</div></div>
+{% endblock %}

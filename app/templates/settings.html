@@ -24,7 +24,7 @@
 <form method="post" action="/settings/me" class="stack">{{ csrf_field() }}
 <label>Name <span class="hint">used when you sign</span></label><input type="text" name="name" value="{{ user.name }}">
 <label class="check"><input type="checkbox" name="notify" {{ 'checked' if user.notify }}> Email me reminders and sign-off requests</label>
-<div class="actions"><button class="secondary">Save</button><a class="btn secondary" href="/settings/mfa">{{ 'Manage' if user.totp_secret else 'Turn on' }} two-step sign-in</a></div></form></div>
+<div class="actions"><button class="secondary">Save</button><a class="btn secondary" href="/account/password">Change password</a><a class="btn secondary" href="/settings/mfa">{{ 'Manage' if user.totp_secret else 'Turn on' }} two-step sign-in</a></div></form></div>
 
 <div class="card"><div class="card-head"><h2>Reminders</h2><span class="muted small">{{ mail_status }}</span></div>
 <p class="small muted m0">Sent at 60, 30 and 7 days before each periodic deadline, when overdue, for high findings, and to signers when a sign-off waits more than 2 days. Each one goes out once.</p>
@@ -32,14 +32,20 @@
 {% else %}<p class="small">Nothing waiting to be sent.</p>{% endif %}
 {% if user.role == 'admin' and reminder_items %}<form method="post" action="/settings/reminders/send" class="actions">{{ csrf_field() }}<button class="secondary">Send now</button></form>{% endif %}
 </div>
+{% if platform_admin %}<div class="card"><div class="card-head"><h2>Backups</h2>{% if last_backup %}<span class="small muted">last {{ last_backup.at.strftime('%Y-%m-%d %H:%M') }} UTC</span>{% endif %}</div>
+<p class="small m0">{% if last_backup %}{{ last_backup.name }} · {{ '{:,.1f} MB'.format(last_backup.size / 1048576) }}{% else %}{{ pill('No backup yet', 'bad') }}{% endif %}</p>
+<div class="actions"><a class="btn secondary" href="/settings/backups">Manage backups</a></div></div>{% endif %}
 </div>
 
 <div class="card"><div class="card-head"><h2>Users and signers</h2></div>
-<table><tr><th>User</th><th>Role</th><th>Signer</th><th></th></tr>
-{% for u in users %}<tr><td>{{ u.name }}<div class="small muted">{{ u.email }}{{ ' · 2-step on' if u.totp_secret }}</div></td><td>{{ u.role }}</td>
-<td>{% if user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/signer" class="inline">{{ csrf_field() }}<button class="linkbtn">{{ pill('Signer','ok') if u.can_sign else pill('No','neutral') }}</button></form>{% else %}{{ pill('Signer','ok') if u.can_sign else pill('No','neutral') }}{% endif %}</td>
-<td>{% if u.id != user.id and user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/toggle" class="inline">{{ csrf_field() }}<button class="secondary small-btn">{{ 'Disable' if u.active else 'Enable' }}</button></form>
-{% if u.totp_secret %}<form method="post" action="/settings/users/{{ u.id }}/reset-mfa" class="inline" data-confirm="Reset two-step sign-in for {{ u.email }}?">{{ csrf_field() }}<button class="linkbtn">Reset 2-step</button></form>{% endif %}{% elif not u.active %}disabled{% endif %}</td></tr>{% endfor %}</table>
+<table class="users"><tr><th>User</th><th>Role</th><th>Signer</th></tr>
+{% for u, m in members %}<tr><td>{{ u.name }}<div class="small muted">{{ u.email }}{{ ' · 2-step on' if u.totp_secret }}{{ ' · must set password' if u.must_change_password }}</div>
+<div class="user-actions">{% if u.id != user.id and user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/toggle" class="inline">{{ csrf_field() }}<button class="secondary small-btn">{{ 'Disable' if u.active else 'Enable' }}</button></form>
+<form method="post" action="/settings/users/{{ u.id }}/password" class="inline">{{ csrf_field() }}<button class="linkbtn">Email reset link</button></form>
+<form method="post" action="/settings/users/{{ u.id }}/password" class="inline" data-confirm="Set a temporary password for {{ u.email }}? Their sessions end and they must choose a new one.">{{ csrf_field() }}<input type="hidden" name="action" value="temp"><button class="linkbtn">Temp password</button></form>
+{% if u.totp_secret %}<form method="post" action="/settings/users/{{ u.id }}/reset-mfa" class="inline" data-confirm="Reset two-step sign-in for {{ u.email }}?">{{ csrf_field() }}<button class="linkbtn">Reset 2-step</button></form>{% endif %}{% elif not u.active %}<span class="small muted">disabled</span>{% endif %}</div></td><td>{{ m.role }}</td>
+<td>{% if user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/signer" class="inline">{{ csrf_field() }}<button class="linkbtn">{{ pill('Signer','ok') if m.can_sign else pill('No','neutral') }}</button></form>{% else %}{{ pill('Signer','ok') if m.can_sign else pill('No','neutral') }}{% endif %}</td>
+</tr>{% endfor %}</table>
 <p class="small muted">Signers approve policies, the asset list review and the plan. Mark the CIP Senior Manager and any delegates. A viewer can be a signer.</p>
 {% if user.role == 'admin' %}<form method="post" action="/settings/users" class="stack">{{ csrf_field() }}
 <div class="row"><div><label>Name</label><input type="text" name="name"></div><div><label>Email</label><input type="email" name="email" required></div></div>
@@ -59,6 +65,24 @@
 <label>Authority delegated</label><input type="text" name="authority" required placeholder="e.g. Approve CIP-002 R2 asset list reviews">
 <label>Effective</label><input type="date" name="effective_on" required>
 <div class="actions"><button class="secondary">Add delegation</button></div></form>{% endif %}
+</div>
+
+{% if ai_server %}<div class="card"><div class="card-head"><h2>AI drafting</h2>{{ pill('On', 'ok') if org.ai_enabled else pill('Off', 'neutral') }}</div>
+<p class="small muted m0">Adds "Suggest with AI" to plan sections and RSAW responses. To draft, PrismCIP sends the requirement, your record-based summary, evidence titles and dates, asset names and the current text to {{ ai_model }} at the AI provider. Files, email addresses and account names aren't sent. Suggestions wait for a person to accept them; each request and decision is in the activity log.</p>
+{% if user.role == 'admin' %}<form method="post" action="/settings/ai" class="stack">{{ csrf_field() }}
+<label class="check"><input type="checkbox" name="ai_enabled" {{ 'checked' if org.ai_enabled }}> Turn on AI drafting for {{ org.name }}</label>
+<div class="actions"><button class="secondary">Save</button></div></form>{% endif %}</div>{% endif %}
+
+<div class="card"><div class="card-head"><h2>Single sign-on</h2>{{ pill('On', 'ok') if org.oidc_issuer else pill('Off', 'neutral') }}</div>
+<p class="small muted m0">Sign in through your identity provider (Entra ID, Okta, Google Workspace…). Register <span class="mono wrap-any">{{ request.base_url }}login/sso/callback</span> as the redirect URI. People still need an account here with the same email.</p>
+{% if user.role == 'admin' %}<form method="post" action="/settings/sso" class="stack">{{ csrf_field() }}
+<label>Issuer URL</label><input type="text" name="oidc_issuer" value="{{ org.oidc_issuer or '' }}" placeholder="https://login.microsoftonline.com/<tenant-id>/v2.0">
+<div class="row"><div><label>Client ID</label><input type="text" name="oidc_client_id" value="{{ org.oidc_client_id or '' }}"></div>
+<div><label>Client secret <span class="hint">{{ 'stored; leave blank to keep' if org.oidc_client_secret else '' }}</span></label><input type="password" name="oidc_client_secret" autocomplete="off"></div></div>
+<label>Email domain(s) <span class="hint">only these addresses can sign in this way</span></label><input type="text" name="oidc_domain" value="{{ org.oidc_domain or '' }}" placeholder="highplains.coop">
+<label class="check"><input type="checkbox" name="sso_required" {{ 'checked' if org.sso_required }}> Require single sign-on (turns off password sign-in for people who only work here; admins keep it as a break-glass, so give them MFA)</label>
+<div class="actions"><button class="secondary">Save</button>
+{% if org.oidc_issuer %}<button class="danger" name="action" value="remove" data-confirm-click="Remove single sign-on?">Remove</button>{% endif %}</div></form>{% endif %}
 </div>
 
 <div class="card"><div class="card-head"><h2>Session import</h2></div>

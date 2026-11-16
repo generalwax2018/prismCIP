@@ -89,12 +89,13 @@ def export(request: Request, user: User = Depends(current_user), db: Session = D
             if e.stored_name and evidence_path(e).exists():
                 path_in_zip = evidence_zip_path(e)
                 z.write(evidence_path(e), path_in_zip)
-            idx.append([e.requirement.code, e.title, e.performed_on, e.asset.name if e.asset else "",
+            idx.append([e.id, e.requirement.code, e.title, e.performed_on, e.asset.name if e.asset else "",
                         e.uploaded_by, e.uploaded_at, e.sha256 or "", path_in_zip,
-                        "yes" if e.performed_on >= cutoff else "older than retention window"])
+                        "yes" if e.performed_on >= cutoff else "older than retention window",
+                        f"superseded by #{e.superseded_by_id}: {e.superseded_note}" if e.superseded_by_id else "current"])
         z.writestr("05_evidence_index.csv", _csv(
-            idx, ["requirement", "title", "performed_on", "asset", "uploaded_by", "uploaded_utc", "sha256",
-                  "file_in_package", "within_3yr_retention"]))
+            idx, ["id", "requirement", "title", "performed_on", "asset", "uploaded_by", "uploaded_utc", "sha256",
+                  "file_in_package", "within_3yr_retention", "version"]))
         from .rsaw import render_export
         z.writestr("07_rsaw_workbook.html", render_export(db, org))
         from ..models import Finding, Signoff
@@ -111,15 +112,51 @@ def export(request: Request, user: User = Depends(current_user), db: Session = D
         z.writestr("08_signoffs.csv", _csv(so_rows, ["id", "document", "requirement", "status", "requested_by",
                                                      "requested_utc", "signer", "signed_as", "decided_utc",
                                                      "document_sha256", "file_in_package"]))
+        from ..models import AuditRequest, Noncompliance
+        z.writestr("11_noncompliance.csv", _csv(
+            [[x.id, x.requirement.code, x.title, x.description, x.discovered_on, x.discovered_how, x.started_on or "",
+              x.ended_on or "", x.cause_category or "", x.root_cause or "", x.risk or "", x.risk_rationale or "",
+              x.disposition, x.submitted_on or "", x.tracking_id or "", x.status, x.closed_on or "",
+              " | ".join(f"{st.text} (owner {st.owner or '-'}, due {st.due_on or '-'}, done {st.completed_on or 'open'})"
+                         for st in x.steps)]
+             for x in db.query(Noncompliance).filter_by(org_id=org.id).order_by(Noncompliance.id).all()],
+            ["id", "requirement", "title", "what_happened", "discovered_on", "discovered_how", "began", "restored",
+             "cause", "root_cause", "risk", "risk_rationale", "reporting", "submitted_on", "re_reference", "status",
+             "closed_on", "mitigation_steps"]))
+        z.writestr("12_audit_requests.csv", _csv(
+            [[r.ref, r.received_on, r.due_on, r.requirement.code if r.requirement else "", r.request,
+              r.owner.name if r.owner else "", r.status, r.submitted_on or "", r.response or "",
+              "; ".join(f"#{e.id} {e.title}" for e in r.evidence)]
+             for r in db.query(AuditRequest).filter_by(org_id=org.id).order_by(AuditRequest.received_on).all()],
+            ["ref", "received", "due", "requirement", "request", "owner", "status", "submitted", "response",
+             "files"]))
         z.writestr("09_findings.csv", _csv(
             [[x.id, x.severity, x.status, x.requirement_code or "", x.title, x.detail or "", x.created_at,
               x.resolved_by or "", x.resolution or ""]
              for x in db.query(Finding).filter_by(org_id=org.id).order_by(Finding.id).all()],
             ["id", "severity", "status", "requirement", "title", "detail", "found_utc", "resolved_by", "resolution"]))
+        from .. import chain
+        chain.anchor_all()
+        report = chain.verify(db, org.id)
+        logs = db.query(AuditLog).filter_by(org_id=org.id).order_by(AuditLog.seq).all()
         z.writestr("06_activity_log.csv", _csv(
-            [[r.at, r.actor, r.action, r.detail or ""] for r in logs], ["at_utc", "actor", "action", "detail"]))
+            [[r.seq, r.at.isoformat(timespec="microseconds"), r.actor, r.action, r.detail or "", r.prev_hash, r.hash]
+             for r in logs],
+            ["seq", "at_utc", "actor", "action", "detail", "prev_hash", "hash"]))
+        z.writestr("10_activity_log_verification.txt",
+                   f"Activity log hash chain for {org.name}\n"
+                   f"Verified: {'OK' if report['ok'] else 'BROKEN'} at {today}\n"
+                   f"Entries: {report['entries']}  Head (seq {report['head_seq']}): {report['head']}\n"
+                   f"Anchors checked: {report['anchors']}\n"
+                   + ("".join(f"BREAK: {b}\n" for b in report["breaks"]))
+                   + "\nEach hash = SHA-256 of JSON [prev_hash, seq, org_id, at (ISO, microseconds), actor, action, "
+                     "detail]. Recompute from 06_activity_log.csv to check independently.\n"
+                   + "\nAnchors (head hashes written daily outside the database):\n"
+                   + "".join(f"{a['at']} seq {a['seq']} {a['hash']}\n" for a in chain.read_anchors(org.id)))
 
-    audit(db, user, "audit_package_exported", f"{len(evidence)} evidence items")
+    from .evidence import lock_evidence
+    locked = lock_evidence(evidence, f"Included in audit package exported {today}")
+    audit(db, user, "audit_package_exported", f"{len(evidence)} evidence items; {locked} newly locked")
     db.commit()
     fname = f"PrismCIP_audit_package_{_safe(org.name).replace(' ', '_')}_{today.isoformat()}.zip"
     return Response(buf.getvalue(), media_type="application/zip",

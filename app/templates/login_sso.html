@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Single sign-on{% endblock %}
+{% block bare %}
+<form method="post" action="/login/sso" class="login-card stack">{{ csrf_field() }}
+  <div class="app-icon lg">{{ icon('diamond', 28, 2) }}</div>
+  <h1>Single sign-on</h1>
+  <p class="sub">Enter your work email; you'll go to your organization's sign-in page.</p>
+  {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+  <label>Email</label><input type="email" name="email" required autofocus>
+  <button>Continue</button>
+  <p class="small muted"><a href="/login">Use a password instead</a></p>
+</form>
+{% endblock %}

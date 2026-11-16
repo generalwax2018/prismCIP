@@ -8,7 +8,7 @@ from starlette.datastructures import UploadFile
 
 from ..auth import audit, csrf_protect, editor
 from ..db import UPLOAD_DIR, get_db
-from ..fwreview import looks_like_fortigate, parse_fortigate_policies, review, summarize
+from ..fwreview import parse_any, review, summarize
 from ..models import Asset, Evidence, Finding, Requirement, User, utcnow
 from ..web import redirect, render, templates
 from .inventory import owned
@@ -28,10 +28,10 @@ async def firewall_review(aid: int, request: Request, user: User = Depends(edito
     if len(data) > MAX_CFG:
         return redirect(f"/assets/{aid}", "Config is larger than 10 MB.", request)
     text = data.decode("utf-8", "replace")
-    if not looks_like_fortigate(text):
-        return redirect(f"/assets/{aid}", "That doesn't look like a FortiGate backup (no 'config firewall policy' "
-                                          "section). Other brands aren't supported yet.", request)
-    rules = parse_fortigate_policies(text)
+    try:
+        brand, rules = parse_any(text)
+    except Exception as exc:  # malformed XML, DTDs, unknown formats
+        return redirect(f"/assets/{aid}", f"Couldn't read that config: {exc}", request)
     issues = review(rules)
     summary = summarize(rules, issues)
     at = utcnow()
@@ -57,6 +57,6 @@ async def firewall_review(aid: int, request: Request, user: User = Depends(edito
                 db.add(Finding(org_id=user.org_id, kind="firewall_rule", severity="high",
                                title=f"{a.name}: {i.rule} — {i.text.split('.')[0]}", detail=i.text,
                                requirement_code=i.code, dedupe_key=key))
-    audit(db, user, "firewall_reviewed", f"{a.name}: {summary}")
+    audit(db, user, "firewall_reviewed", f"{a.name} ({brand}): {summary}")
     db.commit()
     return render(request, "fw_result.html", user, asset=a, issues=issues, summary=summary, rules=rules)

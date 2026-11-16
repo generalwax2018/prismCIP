@@ -58,7 +58,8 @@ def snapshot(db: Session, user: User, kind: str) -> bytes:
 def signoffs(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     rows = db.query(Signoff).filter_by(org_id=user.org_id).order_by(Signoff.id.desc()).all()
     mine = [x for x in rows if x.status == "Pending" and x.signer_id == user.id]
-    signers = db.query(User).filter_by(org_id=user.org_id, can_sign=True, active=True).order_by(User.name).all()
+    from ..members import member_users
+    signers = member_users(db, user.org_id, active_only=True, signers_only=True)
     return render(request, "signoffs.html", user, rows=rows, mine=mine, signers=signers, kinds=KINDS)
 
 
@@ -72,7 +73,9 @@ async def request_signoff(request: Request, user: User = Depends(editor), db: Se
         signer = db.get(User, int(f.get("signer_id", 0)))
     except ValueError:
         signer = None
-    if not signer or signer.org_id != user.org_id or not signer.can_sign or not signer.active:
+    from ..members import membership
+    m = membership(db, signer.id, user.org_id) if signer else None
+    if not signer or not m or not m.can_sign or not signer.active:
         return redirect("/signoffs", "Pick a signer. Mark the CIP Senior Manager and delegates as signers in "
                                      "Settings first.", request)
     title = s(f, "title") or KINDS[kind][0]
@@ -122,10 +125,12 @@ def signoff_document(sid: int, user: User = Depends(current_user), db: Session =
 
 @router.post("/signoffs/{sid}/decide", dependencies=[Depends(csrf_protect)])
 async def decide(sid: int, request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..billing import check_write
+    check_write(request, user)
     so = db.get(Signoff, sid)
     if not so or so.org_id != user.org_id:
         raise HTTPException(404)
-    if so.signer_id != user.id or so.status != "Pending" or not user.can_sign:
+    if so.signer_id != user.id or so.status != "Pending" or not user.can_sign or so.org_id != user.org_id:
         raise HTTPException(403, "Only the named signer can decide this.")
     f = await request.form()
     decision = f.get("decision")
@@ -150,7 +155,8 @@ async def decide(sid: int, request: Request, user: User = Depends(current_user),
                       description=f"Signed by {typed} ({user.email}) on {so.decided_at:%Y-%m-%d %H:%M} UTC. "
                                   f"Document {so.file_name}, sha256 {so.sha256}. Sign-off #{so.id}.",
                       performed_on=so.decided_at.date(), file_name=f"signoff_{so.id}_record.html",
-                      stored_name=stored, sha256=digest, uploaded_by=user.email)
+                      stored_name=stored, sha256=digest, uploaded_by=user.email,
+                      locked_at=utcnow(), locked_reason=f"Signature record for sign-off #{so.id}")
         db.add(ev)
         db.flush()
         so.evidence_id = ev.id

@@ -9,33 +9,46 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.sessions import SessionMiddleware
 
-from . import models  # noqa: F401  (register tables)
-from .auth import LoginRequired
+from . import chain, models  # noqa: F401  (register tables; chain hooks the activity log)
+from .billing import BillingRequired
+from .auth import LoginRequired, PasswordChangeRequired
 from .catalog import seed_requirements
 from .db import Base, SessionLocal, auto_migrate, engine, server_key
-from .routes import core, evidence, firewall, inventory, planedit, portal, programs, remote, reports, rsaw, signoffs
+from .routes import account, aidraft, auditreq, backups, board, portfolio, readiness, signup, sso, core, noncompliance, vendorlife, evidence, firewall, inventory, planedit, portal, programs, remote, reports, rsaw, signoffs
 from .web import render
 
 
 
 
-async def _reminder_loop():
-    """Once a day after PRISMCIP_REMINDER_HOUR (server local time, default 7), send due reminders."""
+async def _daily_loop():
+    """Daily jobs, checked every 30 minutes (server local time):
+    backups after PRISMCIP_BACKUP_HOUR (default 2) unless PRISMCIP_BACKUPS=off,
+    reminders after PRISMCIP_REMINDER_HOUR (default 7) unless PRISMCIP_REMINDERS=off."""
     import asyncio
     from datetime import date, datetime
 
-    from . import reminders
-    hour = int(os.environ.get("PRISMCIP_REMINDER_HOUR", "7"))
-    last = None
+    from . import backup, reminders
+    jobs = []
+    if os.environ.get("PRISMCIP_BACKUPS", "on") != "off":
+        jobs.append(("backup", int(os.environ.get("PRISMCIP_BACKUP_HOUR", "2")),
+                     lambda: backup.create(label="scheduled")))
+    from . import chain as _chain
+    jobs.append(("anchor", 0, _chain.anchor_all))
+    if os.environ.get("PRISMCIP_REMINDERS", "on") != "off":
+        def _remind():
+            with SessionLocal() as db:
+                reminders.run_all(db, base_url=os.environ.get("PRISMCIP_BASE_URL", ""))
+        jobs.append(("reminders", int(os.environ.get("PRISMCIP_REMINDER_HOUR", "7")), _remind))
+    last: dict[str, date] = {}
     while True:
         now = datetime.now()
-        if now.hour >= hour and last != date.today():
-            try:
-                with SessionLocal() as db:
-                    reminders.run_all(db, base_url=os.environ.get("PRISMCIP_BASE_URL", ""))
-                last = date.today()
-            except Exception as exc:  # never let a mail problem take the app down
-                print(f"[prismcip] reminder run failed: {exc!r}")
+        for name, hour, fn in jobs:
+            if now.hour >= hour and last.get(name) != date.today():
+                try:
+                    await asyncio.to_thread(fn)
+                    last[name] = date.today()
+                except Exception as exc:  # never let a job failure take the app down
+                    print(f"[prismcip] {name} job failed: {exc!r}")
         await asyncio.sleep(1800)
 
 
@@ -46,12 +59,18 @@ async def lifespan(_app):
     auto_migrate()
     with SessionLocal() as db:
         seed_requirements(db)
+        from .members import ensure_memberships
+        ensure_memberships(db)
+    chain.seal_pending()  # chains entries written before the hash chain existed, in their original order
     task = None
-    if os.environ.get("PRISMCIP_REMINDERS", "on") != "off":
-        task = asyncio.create_task(_reminder_loop())
+    if os.environ.get("PRISMCIP_REMINDERS", "on") != "off" or os.environ.get("PRISMCIP_BACKUPS", "on") != "off":
+        task = asyncio.create_task(_daily_loop())
+    from . import syslog
+    syslog_task = asyncio.create_task(syslog.run()) if os.environ.get("PRISMCIP_SYSLOG_PORT") else None
     yield
-    if task:
-        task.cancel()
+    for tk in (task, syslog_task):
+        if tk:
+            tk.cancel()
 
 
 app = FastAPI(title="PrismCIP", lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
@@ -77,6 +96,17 @@ async def _login_required(request: Request, _exc):
     return RedirectResponse("/login", status_code=303)
 
 
+@app.exception_handler(BillingRequired)
+async def _billing_required(request: Request, _exc):
+    request.session["flash"] = "Changes are paused until billing is set up. You can still read and export."
+    return RedirectResponse("/billing", status_code=303)
+
+
+@app.exception_handler(PasswordChangeRequired)
+async def _password_change(request: Request, _exc):
+    return RedirectResponse("/account/password", status_code=303)
+
+
 @app.exception_handler(StarletteHTTPException)
 async def _http_error(request: Request, exc: StarletteHTTPException):
     msg = exc.detail if exc.status_code != 404 else "Not found."
@@ -91,5 +121,5 @@ def healthz():
 
 
 app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")), name="static")
-for r in (core.router, remote.router, inventory.router, evidence.router, reports.router, signoffs.router, rsaw.router, planedit.router, programs.router, portal.router, firewall.router):
+for r in (account.router, aidraft.router, signup.router, sso.router, portfolio.router, readiness.router, board.router, backups.router, vendorlife.router, noncompliance.router, auditreq.router, core.router, remote.router, inventory.router, evidence.router, reports.router, signoffs.router, rsaw.router, planedit.router, programs.router, portal.router, firewall.router):
     app.include_router(r)

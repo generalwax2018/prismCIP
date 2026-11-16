@@ -1,0 +1,11 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Not applicable — {{ req.code }}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;color:#1b2330;line-height:1.5}dt{color:#5d6878;margin-top:.6rem}dd{margin:0;font-weight:600}</style></head><body>
+<h1>Applicability decision</h1>
+<p>{{ org.name }}{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}</p>
+<dl><dt>Requirement</dt><dd>{{ req.code }} — {{ req.title }}</dd>
+<dt>Decision</dt><dd>Not applicable</dd>
+<dt>Reason</dt><dd>{{ reason }}</dd>
+<dt>Recorded by</dt><dd>{{ by.name }} ({{ by.email }}), {{ at.strftime('%Y-%m-%d %H:%M') }} UTC</dd>
+<dt>CIP Senior Manager on record</dt><dd>{{ org.cip_senior_manager or 'not recorded' }}</dd></dl>
+<p>If circumstances change (for example, an asset starts allowing vendor remote access), this decision must be withdrawn and the requirement met.</p>
+</body></html>

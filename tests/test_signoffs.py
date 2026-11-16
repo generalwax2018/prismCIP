@@ -101,7 +101,7 @@ def test_tampered_document_cannot_be_signed(ctx):
 
 def test_reminders_fire_once_per_milestone(ctx):
     with SessionLocal() as db:
-        org = db.query(Organization).first()
+        org = db.query(Organization).order_by(Organization.id).first()
         req = db.query(Requirement).filter_by(code="CIP-003 Att1 S1").first()
         db.query(ReminderLog).delete()
         db.commit()

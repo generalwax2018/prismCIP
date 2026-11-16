@@ -20,11 +20,18 @@
 <a class="skip btn" href="#main">Skip to content</a>
 <header class="topbar">
   <div class="topbar-inner">
-    <a class="app" href="/"><span class="app-icon">{{ icon('diamond', 17, 2) }}</span><span class="app-name">{{ app_name }}</span><span class="app-sub">{{ user.org.name }}</span></a>
+    <a class="app" href="/"><span class="app-icon">{{ icon('diamond', 17, 2) }}</span><span class="app-name">{{ app_name }}</span>{% if not navc.orgs or navc.orgs|length < 2 %}<span class="app-sub">{{ user.org.name }}</span>{% endif %}</a>
+    {% if navc.orgs and navc.orgs|length > 1 %}
+    <details class="org-switch"><summary>{{ user.org.name }}</summary>
+      <div class="org-menu">
+        {% for oid, oname in navc.orgs %}<form method="post" action="/orgs/switch">{{ csrf_field() }}<input type="hidden" name="org_id" value="{{ oid }}"><button class="org-item {{ 'on' if oid == user.org_id }}">{{ oname }}</button></form>{% endfor %}
+        <a class="org-item" href="/portfolio">All utilities →</a>
+      </div></details>
+    {% endif %}
     <nav class="segmented" aria-label="Views">
       <a class="{{ 'on' if path_ == '/' }}" href="/">Dashboard</a>
       <a class="{{ 'on' if path_.startswith('/requirements') }}" href="/requirements">Requirements</a>
-      <a class="{{ 'on' if path_.startswith('/access') }}" href="/access">Remote access</a>
+      <a class="{{ 'on' if path_.startswith('/access') and not path_.startswith('/access/review') }}" href="/access">Remote access</a>
       <a class="{{ 'on' if path_.startswith('/findings') }}" href="/findings">Findings<span class="badge" data-n="{{ navc.open_findings or 0 }}">{{ navc.open_findings or 0 }}</span></a>
       <a class="{{ 'on' if path_.startswith('/plan') }}" href="/plan">Plan</a>
     </nav>
@@ -38,6 +45,16 @@
     <nav class="nav" aria-label="Inventory">
       {{ nav('/assets', 'Assets', 'site', '/assets') }}
       {{ nav('/vendors', 'Vendors', 'vendor', '/vendors') }}
+      {{ nav('/access/review', 'Account review', 'check', '/access/review') }}
+    </nav>
+  </section>
+  <section class="group">
+    <div class="group-title">Audit</div>
+    <nav class="nav" aria-label="Audit">
+      {{ nav('/audit-requests', 'Audit requests', 'inbox', '/audit-requests') }}
+      {{ nav('/noncompliance', 'Noncompliance', 'flag', '/noncompliance') }}
+      {{ nav('/reports/board', 'Board report', 'chart', '/reports/board') }}
+      {{ nav('/readiness', 'CIP-003-11 readiness', 'target', '/readiness') }}
     </nav>
   </section>
   <section class="group">
@@ -60,6 +77,7 @@
     <div class="group-title">Admin</div>
     <nav class="nav" aria-label="Admin">
       {{ nav('/settings', 'Settings', 'gear') }}
+      {% if (navc.billing or {}).gated and user.role == 'admin' %}{{ nav('/billing', 'Billing', 'chart', '/billing') }}{% endif %}
     </nav>
   </section>
   <div class="who">
@@ -70,6 +88,10 @@
   </div>
 </aside>
 <main class="main" id="main">
+  {% set bl = navc.billing or {} %}
+  {% if bl.locked %}<div class="flash err billing-banner" role="alert">{{ 'The free trial has ended' if bl.status == 'trialing' else 'The subscription is ' ~ bl.status|replace('_', ' ') }}. Everything is still here and can be read and exported; changes are paused until billing is set up. {% if user.role == 'admin' %}<a href="/billing">Set up billing</a>{% else %}Ask an admin to set up billing.{% endif %}</div>
+  {% elif bl.status == 'trialing' and bl.days_left <= 7 %}<div class="flash billing-banner" role="status">Free trial: {{ bl.days_left }} day(s) left. {% if user.role == 'admin' %}<a href="/billing">Subscribe</a>{% endif %}</div>
+  {% elif bl.status == 'past_due' %}<div class="flash err billing-banner" role="alert">The last payment didn't go through. {% if user.role == 'admin' %}<a href="/billing">Update billing</a>{% endif %}</div>{% endif %}
   {% if flash %}<div class="flash" role="status">{{ flash }}</div>{% endif %}
   {% if error %}<div class="flash err" role="alert">{{ error }}</div>{% endif %}
   {% block content %}{% endblock %}

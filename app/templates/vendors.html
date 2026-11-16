@@ -3,9 +3,9 @@
 {% block content %}
 <h1>Vendors</h1><p class="sub">Companies that can reach your assets remotely — integrators, OEMs, relay and SCADA support.</p>
 <div class="grid g2">
-<div>{% if rows %}<table><tr><th>Vendor</th><th>Access paths</th><th>Enabled</th></tr>
+<div>{% if rows %}<table><tr><th>Vendor</th><th>Status</th><th>Access paths</th><th>Enabled</th></tr>
 {% for v in rows %}<tr><td><a href="/vendors/{{ v.id }}"><b>{{ v.name }}</b></a><div class="small muted">{{ v.services or '' }}</div></td>
-<td class="num">{{ v.access|length }}</td><td class="num">{{ v.access|selectattr('status','equalto','Enabled')|list|length }}</td></tr>{% endfor %}</table>
+<td>{{ pill(v.status, {'Active':'neutral','Offboarding':'warn','Offboarded':'ok'}[v.status]) }}{% if v.contract_end %}<div class="small muted">ends {{ v.contract_end }}</div>{% endif %}</td><td class="num">{{ v.access|length }}</td><td class="num">{{ v.access|selectattr('status','equalto','Enabled')|list|length }}</td></tr>{% endfor %}</table>
 {% else %}<div class="card muted">No vendors yet.</div>{% endif %}</div>
 {% if user.role != 'viewer' %}
 <div class="card"><h3 class="mt0">Add vendor</h3>

@@ -31,9 +31,10 @@ def _decode(data: bytes) -> str:
 # ---------- import ----------
 @router.get("/access/import")
 def import_form(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .. import syslog
     batches = db.query(ImportBatch).filter_by(org_id=user.org_id).order_by(ImportBatch.id.desc()).limit(25).all()
     unmapped = sum(1 for p in db.query(VendorAccess).filter_by(org_id=user.org_id).all() if not p.account_list)
-    return render(request, "import.html", user, batches=batches, unmapped_paths=unmapped)
+    return render(request, "import.html", user, batches=batches, unmapped_paths=unmapped, syslog=syslog.stats)
 
 
 @router.post("/access/import", dependencies=[Depends(csrf_protect)])
@@ -45,7 +46,7 @@ async def import_upload(request: Request, user: User = Depends(editor), db: Sess
     data = await up.read(MAX_LOG_BYTES + 1)
     if len(data) > MAX_LOG_BYTES:
         return redirect("/access/import", "File is larger than 20 MB. Split it or use the API.", request)
-    fmt = f.get("format") if f.get("format") in ("auto", "fortigate", "csv") else "auto"
+    fmt = f.get("format") if f.get("format") in ("auto", "fortigate", "globalprotect", "csv") else "auto"
     try:
         batch, parsed = import_text(db, user.org, _decode(data), by=user.email, fmt=fmt, file_name=up.filename[:300])
     except ValueError as e:
@@ -165,7 +166,7 @@ async def api_ingest(request: Request, db: Session = Depends(get_db)):
     if len(body) > MAX_LOG_BYTES:
         return JSONResponse({"error": "body larger than 20 MB"}, status_code=413)
     fmt = request.query_params.get("format", "auto")
-    fmt = fmt if fmt in ("auto", "fortigate", "csv") else "auto"
+    fmt = fmt if fmt in ("auto", "fortigate", "globalprotect", "csv") else "auto"
     try:
         batch, parsed = import_text(db, org, _decode(body), by="api", fmt=fmt, source="api")
     except ValueError as e:

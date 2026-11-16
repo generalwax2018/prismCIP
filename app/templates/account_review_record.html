@@ -1,0 +1,7 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Vendor account review</title>
+<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;color:#1b2330}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d5dbe2;padding:.35rem .5rem;text-align:left;font-size:13px}th{background:#eef1f5}</style></head><body>
+<h1>Vendor account review</h1>
+<p>{{ org.name }} · started {{ rv.started_at.strftime('%Y-%m-%d') }} by {{ rv.started_by }} · completed {{ at.strftime('%Y-%m-%d %H:%M') }} UTC by {{ rv.completed_by }}</p>
+<table><tr><th>Access path</th><th>Account</th><th>Last used</th><th>Decision</th><th>Note</th></tr>
+{% for it in rv.items %}<tr><td>{{ it.label }}</td><td>{{ it.account }}</td><td>{{ it.last_seen.strftime('%Y-%m-%d') if it.last_seen else 'never seen' }}</td><td>{{ it.decision }}</td><td>{{ it.note or '' }}</td></tr>{% endfor %}</table>
+</body></html>

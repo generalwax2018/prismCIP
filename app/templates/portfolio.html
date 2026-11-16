@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Portfolio{% endblock %}
+{% block content %}
+<header class="head"><div><h1>Portfolio</h1><p class="sub">Every utility you work with, worst first. Switching changes which utility the rest of PrismCIP shows; data never mixes between them.</p></div></header>
+<table><tr><th>Utility</th><th>Your role</th><th>In good shape</th><th>Overdue / missing</th><th>High findings</th><th>Open RFIs</th><th>Open noncompliance</th><th>Next deadline</th><th></th></tr>
+{% for r in rows %}<tr><td><b>{{ r.org.name }}</b><div class="small muted">{{ r.org.ncr_id or '' }} {{ r.org.regional_entity or '' }}</div></td>
+<td class="small">{{ r.role }}</td><td>{{ pill(r.pct ~ '%', 'ok' if r.pct >= 90 else 'warn' if r.pct >= 60 else 'bad') }}</td>
+<td class="num">{{ r.overdue }}</td><td class="num">{{ r.high }}</td><td class="num">{{ r.rfis }}</td><td class="num">{{ r.nc }}</td>
+<td class="small">{% if r.next_due %}{{ r.next_due.due }}<div class="muted">{{ r.next_due.req.code }}</div>{% else %}—{% endif %}</td>
+<td>{% if r.org.id == user.org_id %}{{ pill('Current', 'neutral') }}{% else %}<form method="post" action="/orgs/switch" class="inline">{{ csrf_field() }}<input type="hidden" name="org_id" value="{{ r.org.id }}"><button class="secondary small-btn">Open</button></form>{% endif %}</td></tr>{% endfor %}</table>
+{% if can_create %}
+<div class="card narrow-card"><div class="card-head"><h2>Add a utility</h2></div>
+<form method="post" action="/orgs" class="stack">{{ csrf_field() }}
+<label>Utility / registered entity name</label><input type="text" name="name" required>
+<div class="row"><div><label>NCR ID</label><input type="text" name="ncr_id"></div><div><label>Regional Entity</label><select name="regional_entity"><option></option>{% for r in ["MRO","NPCC","RF","SERC","Texas RE","WECC"] %}<option>{{ r }}</option>{% endfor %}</select></div></div>
+<label>Registered functions</label><input type="text" name="registered_functions">
+<div class="actions"><button>Add utility</button></div></form></div>{% endif %}
+{% endblock %}

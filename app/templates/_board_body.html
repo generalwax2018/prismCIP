@@ -1,0 +1,39 @@
+<div class="board">
+<div class="board-head"><div><div class="board-kicker">NERC CIP compliance — board summary</div>
+<h1>{{ org.name }}</h1>
+<p class="board-meta">As of {{ today.strftime('%B %d, %Y') }} · CIP Senior Manager: {{ org.cip_senior_manager or 'not recorded' }}{% if org.audit_id or org.audit_period_end %} · Next audit: {{ org.audit_id or '' }}{% if org.audit_period_end %} (period ends {{ org.audit_period_end }}){% endif %}{% endif %}</p></div>
+<div class="board-score {{ 'bad' if bad else 'warn' if warn else 'ok' }}"><div class="n">{{ pct }}%</div><div class="l">obligations in good shape</div></div></div>
+<p class="board-headline">{{ headline }}</p>
+<div class="board-kpis">
+<div><div class="n">{{ good }}/{{ total }}</div><div class="l">In good shape</div></div>
+<div class="{{ 'bad' if bad }}"><div class="n">{{ bad }}</div><div class="l">Overdue or missing</div></div>
+<div class="{{ 'bad' if high_findings }}"><div class="n">{{ high_findings }}</div><div class="l">Open high findings</div></div>
+<div class="{{ 'warn' if nc_open }}"><div class="n">{{ nc_open }}</div><div class="l">Open possible noncompliance</div></div>
+</div>
+<div class="board-cols">
+<section><h2>Needs attention</h2>
+{% if attention %}<ul>{% for s in attention %}<li><b>{{ s.req.title.split('— ')[-1] }}</b> <span class="muted">({{ s.req.code }})</span> — {{ s.status|lower }}{% if s.due %}, due {{ s.due }}{% endif %}</li>{% endfor %}</ul>
+{% else %}<p>Nothing outstanding.</p>{% endif %}
+<h2>Coming up in the next 90 days</h2>
+{% if upcoming %}<ul>{% for s in upcoming %}<li>{{ s.due.strftime('%b %d') }} — {{ s.req.title.split('— ')[-1] }}</li>{% endfor %}</ul>{% else %}<p>No periodic deadlines.</p>{% endif %}
+</section>
+<section><h2>Vendor remote access, last 90 days</h2>
+<ul><li>{{ sessions }} vendor session(s); {{ approved }} tied to an approval</li>
+<li>{{ unapproved }} session(s) found without approval</li>
+<li>{{ paths_enabled }} vendor access path(s) currently enabled</li>
+<li>{{ vendors_offboarded }} vendor(s) offboarded this year</li></ul>
+<h2>Noncompliance this year</h2>
+<ul><li>{{ nc_year }} recorded; {{ nc_closed_year }} closed</li><li>{{ nc_reported_year }} self-reported or self-logged</li></ul>
+<h2>Audit readiness</h2>
+<ul><li>Policy approved: {{ policy_signed or 'no approval recorded' }}</li>
+<li>Asset list reviewed: {{ assets_signed or 'no approval recorded' }}</li>
+<li>Plan approved: {{ plan_signed or 'no approval recorded' }}</li>
+<li>Open audit requests: {{ rfis_open }}</li>
+<li>Last audit package prepared: {{ last_export or 'never' }}</li></ul>
+<h2>Next standard: CIP-003-11 (effective {{ ready.effective }})</h2>
+<ul><li>{{ ready.done }} of {{ ready.total }} preparation items in place; {{ ready.planned }} planned</li>
+{% if ready.overdue %}<li>{{ ready.overdue }} item(s) past their target date</li>{% endif %}
+<li>{{ ready.days_left }} days to go</li></ul>
+</section></div>
+<p class="board-foot">Prepared by {{ prepared_by }} with PrismCIP. Covers CIP-002 and CIP-003-9 obligations for assets containing low impact BES Cyber Systems. Detailed records are available from the compliance team.</p>
+</div>

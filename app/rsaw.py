@@ -68,6 +68,13 @@ def _in_period(d: date, org: Organization) -> bool:
 
 def draft(db: Session, org: Organization, code: str) -> str:
     """A first draft of the entity response, built only from what PrismCIP has recorded."""
+    from .models import Applicability, Requirement
+    na = (db.query(Applicability).join(Requirement).filter(Applicability.org_id == org.id,
+                                                            Applicability.withdrawn_at.is_(None),
+                                                            Requirement.code == code).first())
+    if na:
+        return (f"Not applicable. {na.reason} (Decision recorded {na.decided_at:%Y-%m-%d} by {na.decided_by}; "
+                f"the record is in the evidence index.)")
     assets = db.query(Asset).filter_by(org_id=org.id).order_by(Asset.name).all()
     paths = db.query(VendorAccess).filter_by(org_id=org.id).all()
     sessions = [s for s in db.query(AccessSession).filter_by(org_id=org.id).all() if _in_period(s.started_at.date(), org)]
@@ -168,7 +175,8 @@ def workbook(db: Session, org: Organization) -> dict:
     narratives = {n.key: n for n in db.query(Narrative).filter(Narrative.org_id == org.id,
                                                                 Narrative.key.like("rsaw:%")).all()}
     ev_by_req = defaultdict(list)
-    for e in db.query(Evidence).filter_by(org_id=org.id).order_by(Evidence.performed_on.desc()).all():
+    for e in (db.query(Evidence).filter_by(org_id=org.id, superseded_by_id=None)
+              .order_by(Evidence.performed_on.desc()).all()):
         ev_by_req[e.requirement.code].append(e)
     open_findings = defaultdict(list)
     for x in db.query(Finding).filter_by(org_id=org.id, status="Open").all():

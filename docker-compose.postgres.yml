@@ -1,0 +1,20 @@
+# Use with: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --build
+# Back up the database with pg_dump (or your managed service); PrismCIP's own backups then cover the evidence files.
+services:
+  app:
+    build:
+      args:
+        REQUIREMENTS: requirements-postgres.txt
+    environment:
+      PRISMCIP_DATABASE_URL: postgresql+psycopg://prismcip:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/prismcip
+    depends_on: [db]
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: prismcip
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: prismcip
+    volumes: [pg-data:/var/lib/postgresql/data]
+volumes:
+  pg-data:

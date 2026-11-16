@@ -15,7 +15,9 @@ router = APIRouter()
 def plan_edit(request: Request, user: User = Depends(editor), db: Session = Depends(get_db)):
     have = {n.key[5:]: n for n in db.query(Narrative).filter(Narrative.org_id == user.org_id,
                                                              Narrative.key.like("plan:%")).all()}
-    return render(request, "plan_edit.html", user, sections=SECTIONS, have=have)
+    from .. import ai
+    return render(request, "plan_edit.html", user, sections=SECTIONS, have=have, ai_on=ai.enabled(user.org),
+                  suggestions=ai.pending(db, user.org_id, "plan:"))
 
 
 @router.post("/plan/edit", dependencies=[Depends(csrf_protect)])

@@ -16,11 +16,21 @@ def nav_counts(user) -> dict:
     if not user:
         return {}
     from .db import SessionLocal
+    from .members import orgs_for
     from .models import Finding, Signoff
     with SessionLocal() as db:
         return {"open_findings": db.query(Finding).filter_by(org_id=user.org_id, status="Open").count(),
                 "my_signoffs": db.query(Signoff).filter_by(org_id=user.org_id, signer_id=user.id,
-                                                           status="Pending").count()}
+                                                           status="Pending").count(),
+                "orgs": [(o.id, o.name) for o, _m in orgs_for(db, user)],
+                "billing": _billing(db, user)}
+
+
+def _billing(db, user):
+    from .billing import state
+    from .models import Organization
+    org = db.get(Organization, user.org_id)
+    return state(org) if org else {}
 
 
 def render(request: Request, name: str, user=None, **ctx):

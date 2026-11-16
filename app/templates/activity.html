@@ -1,7 +1,16 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
 {% block title %}Activity{% endblock %}
 {% block content %}
-<h1>Activity log</h1><p class="sub">Append-only record of who changed what. Included in the audit package. Latest 500 shown.</p>
-<table><tr><th>When (UTC)</th><th>Who</th><th>Action</th><th>Detail</th></tr>
-{% for r in rows %}<tr><td class="mono">{{ r.at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td class="small">{{ r.actor }}</td><td class="mono">{{ r.action }}</td><td class="small">{{ r.detail or '' }}</td></tr>{% endfor %}</table>
+<header class="head"><div><h1>Activity log</h1><p class="sub">Every change, chained with SHA-256 so editing or removing any past entry is detectable. Included in the audit package with a verification report. Latest 500 shown.</p></div>
+{% if user.role == 'admin' %}<form method="post" action="/activity/anchor" class="head-actions">{{ csrf_field() }}<button class="secondary">Anchor now</button></form>{% endif %}</header>
+<div class="card {{ 's6' if chain.ok else '' }}"><div class="card-head"><h2>Integrity</h2>{{ pill('Chain verified', 'ok') if chain.ok else pill('Chain broken', 'bad') }}</div>
+<dl class="kv"><dt>Entries</dt><dd>{{ chain.entries }}</dd>
+<dt>Head hash</dt><dd class="mono small wrap-any">{{ chain.head }} (seq {{ chain.head_seq }})</dd>
+<dt>Anchors</dt><dd>{{ chain.anchors }} checked against the anchor file outside the database</dd>
+{% if chain.first_sealed and chain.first_at and (chain.first_sealed - chain.first_at).days > 1 %}<dt>Note</dt><dd class="small">Entries recorded before {{ chain.first_sealed.strftime('%Y-%m-%d') }} were chained when this version was installed; the chain proves they haven't changed since then.</dd>{% endif %}
+</dl>
+{% if chain.breaks %}<ul class="gaps">{% for b in chain.breaks %}<li>{{ b }}</li>{% endfor %}</ul>{% endif %}
+</div>
+<table><tr><th>#</th><th>When (UTC)</th><th>Who</th><th>Action</th><th>Detail</th><th>Hash</th></tr>
+{% for r in rows %}<tr><td class="num">{{ r.seq or '' }}</td><td class="mono">{{ r.at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td class="small">{{ r.actor }}</td><td class="mono">{{ r.action }}</td><td class="small">{{ r.detail or '' }}</td><td class="mono muted">{{ (r.hash or 'pending')[:10] }}</td></tr>{% endfor %}</table>
 {% endblock %}

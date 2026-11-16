@@ -16,8 +16,16 @@
 <label>Registered entity response {% if it.narrative %}<span class="hint">last saved {{ it.narrative.updated_at.strftime('%Y-%m-%d') }} by {{ it.narrative.updated_by }}</span>{% endif %}</label>
 <textarea name="body" rows="4" {{ 'readonly' if user.role == 'viewer' }}>{{ it.narrative.body if it.narrative else '' }}</textarea>
 {% if user.role != 'viewer' %}<div class="actions"><button class="secondary" name="action" value="save">Save response</button>
-<button class="secondary" name="action" value="draft" data-confirm-click="Replace this response with a draft built from your records?">Draft from records</button></div>{% endif %}
+<button class="secondary" name="action" value="draft" data-confirm-click="Replace this response with a draft built from your records?">Draft from records</button>
+{% if ai_on %}<button class="secondary" formaction="/ai/rsaw/{{ ids[it.code] }}">Suggest with AI</button>{% endif %}</div>{% endif %}
 </form>
+{% set sug = suggestions.get('rsaw:' ~ it.code) %}
+{% if sug %}<form method="post" class="ai-suggestion stack">{{ csrf_field() }}
+<div class="card-head"><h3>AI suggestion</h3>{{ pill('Not yet accepted', 'warn') }}</div>
+<p class="small muted m0">Drafted by {{ sug.model }} for {{ sug.created_by }} on {{ sug.created_at.strftime('%Y-%m-%d %H:%M') }}. Check every statement against your records; fill in anything marked [CONFIRM].</p>
+<textarea name="suggestion_{{ sug.id }}" rows="6" aria-label="AI suggestion">{{ sug.body }}</textarea>
+{% if user.role != 'viewer' %}<div class="actions"><button formaction="/ai/suggestions/{{ sug.id }}/accept">Accept as the response</button><button class="secondary" formaction="/ai/suggestions/{{ sug.id }}/discard">Discard</button></div>{% endif %}
+</form>{% endif %}
 <h3>Evidence in the audit period</h3>
 {% if it.generated %}<p class="small muted m0">Also generated into the audit package: {% for g in it.generated %}<span class="mono">{{ g[0] }}</span> ({{ g[1] }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
 {% if it.evidence %}<table><tr><th>File name</th><th>Document title</th><th>Date</th><th>Relevant section</th><th>Description of applicability</th></tr>

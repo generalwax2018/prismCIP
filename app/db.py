@@ -74,5 +74,10 @@ def auto_migrate():
                 default = ""
                 if col.default is not None and getattr(col.default, "is_scalar", False):
                     v = col.default.arg
-                    default = f" DEFAULT {int(v) if isinstance(v, bool) else repr(v) if isinstance(v, str) else v}"
+                    if isinstance(v, bool):
+                        default = f" DEFAULT {'TRUE' if v else 'FALSE'}"  # valid in SQLite and Postgres
+                    elif isinstance(v, str):
+                        default = " DEFAULT '" + v.replace("'", "''") + "'"
+                    else:
+                        default = f" DEFAULT {v}"
                 conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl_type}{default}'))

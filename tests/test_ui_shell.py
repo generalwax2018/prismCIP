@@ -48,7 +48,9 @@ def test_every_view_marks_itself_once(admin):
                         ("/activity", "Activity log"), ("/settings", "Settings"),
                         ("/programs/awareness", "Awareness"), ("/programs/exercise", "IR exercises"),
                         ("/programs/transient", "Transient devices"), ("/signoffs", "Sign-offs"), ("/rsaw", "RSAW workbook"),
-                        ("/findings", "Findings")):
+                        ("/findings", "Findings"), ("/noncompliance", "Noncompliance"),
+                        ("/audit-requests", "Audit requests"), ("/reports/board", "Board report"), ("/readiness", "CIP-003-11 readiness"),
+                        ("/access/review", "Account review")):
         page = client.get(path).text
         on = re.findall(r'<a class="on" href="([^"]*)">', page)
         assert on == [path], (path, on)

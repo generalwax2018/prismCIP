@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}{{ r.ref }}{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/audit-requests">← Audit requests</a></p>
+<header class="head"><div><h1>{{ r.ref }}</h1><p class="sub">{{ r.requirement.code ~ ' · ' if r.requirement }}received {{ r.received_on }} · due {{ r.due_on }}{{ ' · submitted ' ~ r.submitted_on if r.submitted_on }}</p></div>
+<div class="head-actions">{{ pill(r.status, 'ok' if r.status in ('Submitted','Closed') else 'bad' if r.due_on < today else 'warn') }}<a class="btn secondary" href="/audit-requests/{{ r.id }}/package">{{ icon('download', 15) }}Response package</a></div></header>
+<div class="card"><div class="card-head"><h2>Request</h2></div><p class="pre m0">{{ r.request }}</p></div>
+<div class="grid g2">
+<form method="post" class="card stack">{{ csrf_field() }}
+<div class="card-head"><h2>Response</h2></div>
+<textarea name="response" rows="8" {{ 'readonly' if r.status in ('Submitted','Closed') or user.role == 'viewer' }}>{{ r.response or '' }}</textarea>
+{% if user.role != 'viewer' and r.status not in ('Submitted','Closed') %}
+<div class="row"><div><label>Owner</label><select name="owner_id">{% for u in users %}<option value="{{ u.id }}" {{ 'selected' if r.owner_id == u.id }}>{{ u.name }}</option>{% endfor %}</select></div><div><label>Due</label><input type="date" name="due_on" value="{{ r.due_on }}"></div></div>
+<div class="actions"><button class="secondary" name="action" value="save">Save</button><button name="action" value="submit" data-confirm-click="Mark as submitted? The linked files will be locked.">Mark submitted</button></div>
+{% elif r.status == 'Submitted' and user.role != 'viewer' %}<div class="actions"><button class="secondary" name="action" value="close">Close</button></div>{% endif %}
+</form>
+<div class="card"><div class="card-head"><h2>Files sent ({{ r.evidence|length }})</h2></div>
+{% for e in r.evidence %}<div class="req-line small"><b>{{ e.title }}</b> · {{ e.requirement.code }} · {{ e.performed_on }}{% if e.stored_name %} · <a href="/evidence/{{ e.id }}/download">{{ e.file_name }}</a>{% endif %}
+{% if user.role != 'viewer' and r.status not in ('Submitted','Closed') %}<form method="post" class="inline">{{ csrf_field() }}<input type="hidden" name="action" value="unlink"><input type="hidden" name="evidence_id" value="{{ e.id }}"><button class="linkbtn">remove</button></form>{% endif %}</div>
+{% else %}<p class="muted small">No files linked yet.</p>{% endfor %}
+{% if user.role != 'viewer' and r.status not in ('Submitted','Closed') and candidates %}
+<form method="post" class="stack mt1">{{ csrf_field() }}<input type="hidden" name="action" value="link">
+<label>Add evidence {% if r.requirement %}<span class="hint">for {{ r.requirement.code }} · <a href="?all=1">show all</a></span>{% endif %}</label>
+<select name="evidence_id" multiple size="6">{% for e in candidates %}<option value="{{ e.id }}">{{ e.requirement.code }} · {{ e.performed_on }} · {{ e.title }}</option>{% endfor %}</select>
+<div class="actions"><button class="secondary">Link selected</button></div></form>{% endif %}
+</div></div>
+{% endblock %}

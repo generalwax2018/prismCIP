@@ -6,8 +6,15 @@
 <p class="sub">Write how your utility does each of these in plain language. Everything else in the plan (assets, physical and electronic controls, vendor access methods, roles) comes from your records. When it reads right, request a CIP Senior Manager sign-off on the plan.</p></div></header>
 <form method="post" class="stack">{{ csrf_field() }}
 {% for key, title, hint in sections %}
-<div class="card"><div class="card-head"><h2>{{ title }}</h2>{% if have[key] and have[key].body %}<span class="small muted">saved {{ have[key].updated_at.strftime('%Y-%m-%d') }} by {{ have[key].updated_by }}</span>{% else %}{{ pill('TODO', 'warn') }}{% endif %}</div>
-<textarea name="{{ key }}" rows="4" placeholder="{{ hint }}">{{ have[key].body if have[key] else '' }}</textarea></div>
+<div class="card" id="{{ key }}"><div class="card-head"><h2>{{ title }}</h2>{% if have[key] and have[key].body %}<span class="small muted">saved {{ have[key].updated_at.strftime('%Y-%m-%d') }} by {{ have[key].updated_by }}</span>{% else %}{{ pill('TODO', 'warn') }}{% endif %}</div>
+<textarea name="{{ key }}" rows="4" placeholder="{{ hint }}">{{ have[key].body if have[key] else '' }}</textarea>
+{% if ai_on %}<div class="actions"><button class="secondary" formaction="/ai/plan/{{ key }}">Suggest with AI</button></div>{% endif %}
+{% set sug = suggestions.get('plan:' ~ key) %}
+{% if sug %}<div class="ai-suggestion stack"><div class="card-head"><h3>AI suggestion</h3>{{ pill('Not yet accepted', 'warn') }}</div>
+<p class="small muted m0">Drafted by {{ sug.model }} on {{ sug.created_at.strftime('%Y-%m-%d %H:%M') }}. Check it against what you actually do; fill in anything marked [CONFIRM].</p>
+<textarea name="suggestion_{{ sug.id }}" rows="6" aria-label="AI suggestion">{{ sug.body }}</textarea>
+<div class="actions"><button formaction="/ai/suggestions/{{ sug.id }}/accept">Accept into this section</button><button class="secondary" formaction="/ai/suggestions/{{ sug.id }}/discard">Discard</button></div></div>{% endif %}
+</div>
 {% endfor %}
 <div class="actions"><button>Save plan sections</button><a class="btn secondary" href="/plan">Cancel</a></div>
 </form>

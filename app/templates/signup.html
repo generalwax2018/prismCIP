@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Start a free trial{% endblock %}
+{% block bare %}
+{% set form = form or {} %}
+<form method="post" action="/signup" class="login-card setup-card stack">{{ csrf_field() }}
+  <div class="app-icon lg">{{ icon('diamond', 28, 2) }}</div>
+  <h1>Start your free trial</h1>
+  <p class="sub">{{ trial }} days, no card needed. NERC CIP low impact compliance for your utility.</p>
+  {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+  <label>Utility / registered entity name</label><input type="text" name="org_name" required value="{{ form.org_name or '' }}">
+  <div class="row">
+    <div><label>NCR ID <span class="hint">optional</span></label><input type="text" name="ncr_id" value="{{ form.ncr_id or '' }}"></div>
+    <div><label>Regional Entity</label><select name="regional_entity"><option></option>{% for r in regions %}<option {{ 'selected' if form.regional_entity == r }}>{{ r }}</option>{% endfor %}</select></div>
+  </div>
+  <label>Your name</label><input type="text" name="name" required value="{{ form.name or '' }}">
+  <label>Work email</label><input type="email" name="email" required value="{{ form.email or '' }}">
+  <label>Password <span class="hint">12+ characters</span></label><input type="password" name="password" minlength="12" required>
+  <div class="hp" aria-hidden="true"><label>Website</label><input type="text" name="website" tabindex="-1" autocomplete="off"></div>
+  <label class="check"><input type="checkbox" name="terms" required> I agree to the terms of service and understand PrismCIP organizes compliance records; it doesn't replace my own reading of the standards.</label>
+  <button>Create my workspace</button>
+  <p class="small muted">Already have an account? <a href="/login">Sign in</a></p>
+</form>
+{% endblock %}

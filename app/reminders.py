@@ -1,7 +1,7 @@
 """Due-date and follow-up reminders. Each reminder is sent once per milestone (60, 30, 7 days before, and when
 overdue), so running this every hour or every day is safe."""
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
@@ -48,6 +48,34 @@ def collect(db: Session, org: Organization, today: date | None = None) -> list[I
                               to_signer=so.signer_id))
     for x in db.query(Finding).filter_by(org_id=org.id, status="Open", severity="high").all():
         items.append(Item(f"finding:{x.id}", f"High finding: {x.title}", "bad"))
+    from .models import AuditRequest, MitigationStep, Noncompliance, Vendor
+    for r in db.query(AuditRequest).filter(AuditRequest.org_id == org.id,
+                                           AuditRequest.status.in_(("Open", "In progress"))).all():
+        days = (r.due_on - today).days
+        if days < 0:
+            items.append(Item(f"rfi:{r.id}:overdue", f"Audit request {r.ref} is OVERDUE (due {r.due_on}).", "bad"))
+        elif days <= 2:
+            items.append(Item(f"rfi:{r.id}:soon", f"Audit request {r.ref} is due {r.due_on}.", "warn"))
+    for st in (db.query(MitigationStep).join(Noncompliance)
+               .filter(Noncompliance.org_id == org.id, MitigationStep.completed_on.is_(None),
+                       MitigationStep.due_on.isnot(None), MitigationStep.due_on < today).all()):
+        items.append(Item(f"mitigation:{st.id}:{st.due_on}", f"Mitigation step overdue (noncompliance "
+                          f"#{st.noncompliance_id}): {st.text} — due {st.due_on}.", "bad"))
+    for v in db.query(Vendor).filter(Vendor.org_id == org.id, Vendor.status != "Offboarded",
+                                     Vendor.contract_end.isnot(None)).all():
+        days = (v.contract_end - today).days
+        if days < 0:
+            items.append(Item(f"contract:{v.id}:{v.contract_end}:ended", f"{v.name}'s contract ended "
+                              f"{v.contract_end} but the vendor isn't offboarded.", "bad"))
+        elif days <= 30:
+            items.append(Item(f"contract:{v.id}:{v.contract_end}:30", f"{v.name}'s contract ends {v.contract_end}; "
+                              f"plan the offboarding.", "warn"))
+    from .routes.vendorlife import review_due
+    _last, due = review_due(db, org)
+    if due and due <= today + timedelta(days=14):
+        items.append(Item(f"acctreview:{due}:{'overdue' if due < today else 'soon'}",
+                          f"Vendor account review {'was due' if due < today else 'is due'} by {due}.",
+                          "bad" if due < today else "warn"))
     return items
 
 
@@ -57,8 +85,9 @@ def pending(db: Session, org: Organization, today: date | None = None) -> list[I
 
 
 def _recipients(db: Session, org: Organization) -> list[User]:
-    return [u for u in db.query(User).filter_by(org_id=org.id, active=True, notify=True).all()
-            if u.role in ("admin", "editor") or u.can_sign]
+    from .members import members
+    return [u for u, m in members(db, org.id, active_only=True, notify_only=True)
+            if m.role in ("admin", "editor") or m.can_sign]
 
 
 def send_due(db: Session, org: Organization, today: date | None = None, base_url: str = "") -> dict:
@@ -69,7 +98,8 @@ def send_due(db: Session, org: Organization, today: date | None = None, base_url
     messages = 0
     general = [i for i in items if i.to_signer is None]
     if general:
-        to = [u.email for u in people if u.role in ("admin", "editor")]
+        from .members import membership
+        to = [u.email for u in people if (membership(db, u.id, org.id) or u).role in ("admin", "editor")]
         if to:
             mailer.send(to, f"PrismCIP: {len(general)} compliance item(s) need attention — {org.name}",
                         _body(org, general, base_url))

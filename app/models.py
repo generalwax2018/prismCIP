@@ -1,7 +1,7 @@
 """Data model. Every record belongs to an Organization so the app can go multi-tenant later."""
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, String, Table, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -25,6 +25,20 @@ class Organization(Base):
     audit_period_end: Mapped[date | None] = mapped_column(Date)
     ignored_accounts: Mapped[str | None] = mapped_column(Text)  # comma/newline list: staff accounts that aren't vendors
     ingest_token_hash: Mapped[str | None] = mapped_column(String(64))
+    account_review_months: Mapped[int] = mapped_column(Integer, default=3)
+    oidc_issuer: Mapped[str | None] = mapped_column(String(300))
+    oidc_client_id: Mapped[str | None] = mapped_column(String(300))
+    oidc_client_secret: Mapped[str | None] = mapped_column(String(600))  # sealed with the server key
+    oidc_domain: Mapped[str | None] = mapped_column(String(300), index=True)  # email domains this IdP may vouch for
+    sso_required: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Hosted billing (only used when PRISMCIP_HOSTED is on). None = self-hosted, never gated.
+    plan_status: Mapped[str | None] = mapped_column(String(20))  # trialing | active | past_due | canceled | unpaid
+    trial_ends: Mapped[date | None] = mapped_column(Date)
+    paid_through: Mapped[date | None] = mapped_column(Date)
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(100), index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(100))
+    billing_email: Mapped[str | None] = mapped_column(String(200))
+    ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False)  # admin opt-in: drafts are sent to the AI API
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
 
 
@@ -41,6 +55,10 @@ class User(Base):
     notify: Mapped[bool] = mapped_column(Boolean, default=True)  # receive reminder emails
     totp_secret: Mapped[str | None] = mapped_column(String(200))  # sealed with the server key, never plain
     totp_last_step: Mapped[int | None] = mapped_column(Integer)  # blocks replay of a code already used
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    session_version: Mapped[int] = mapped_column(Integer, default=1)  # bump to sign out every session
+    is_partner: Mapped[bool] = mapped_column(Boolean, default=False)  # may create utilities (consultants, G&Ts)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     org: Mapped[Organization] = relationship()
 
@@ -85,6 +103,9 @@ class Vendor(Base):
     services: Mapped[str | None] = mapped_column(Text)
     portal_token_hash: Mapped[str | None] = mapped_column(String(64), index=True)
     portal_expires: Mapped[date | None] = mapped_column(Date)
+    contract_end: Mapped[date | None] = mapped_column(Date)
+    status: Mapped[str] = mapped_column(String(20), default="Active")  # Active | Offboarding | Offboarded
+    offboarded_on: Mapped[date | None] = mapped_column(Date)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     access: Mapped[list["VendorAccess"]] = relationship(back_populates="vendor", cascade="all, delete-orphan")
 
@@ -271,6 +292,12 @@ class Evidence(Base):
     sha256: Mapped[str | None] = mapped_column(String(64))
     uploaded_by: Mapped[str] = mapped_column(String(200))
     uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    # Locked once the item has gone into an exported package or a signed record: it can then only be superseded.
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime)
+    locked_reason: Mapped[str | None] = mapped_column(String(300))
+    superseded_by_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id", ondelete="SET NULL"))
+    superseded_at: Mapped[datetime | None] = mapped_column(DateTime)
+    superseded_note: Mapped[str | None] = mapped_column(Text)
     requirement: Mapped[Requirement] = relationship()
     asset: Mapped[Asset | None] = relationship()
 
@@ -284,6 +311,11 @@ class AuditLog(Base):
     actor: Mapped[str] = mapped_column(String(200))
     action: Mapped[str] = mapped_column(String(100))
     detail: Mapped[str | None] = mapped_column(Text)
+    # Hash chain (per organization): hash = SHA-256 over the previous hash and this entry's content.
+    seq: Mapped[int | None] = mapped_column(Integer, index=True)
+    prev_hash: Mapped[str | None] = mapped_column(String(64))
+    hash: Mapped[str | None] = mapped_column(String(64))
+    sealed_at: Mapped[datetime | None] = mapped_column(DateTime)
 
 
 
@@ -308,3 +340,204 @@ class ProgramRecord(Base):
     created_by: Mapped[str] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
     asset: Mapped[Asset | None] = relationship()
+
+
+
+class PasswordReset(Base):
+    """Single-use password reset link. Only a SHA-256 of the token is stored."""
+    __tablename__ = "password_resets"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    token_hash: Mapped[str] = mapped_column(String(64), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class LoginAttempt(Base):
+    """Sign-in attempts, for throttling. Kept 30 days."""
+    __tablename__ = "login_attempts"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+    email: Mapped[str] = mapped_column(String(200), index=True)
+    ip: Mapped[str] = mapped_column(String(64), index=True)
+    kind: Mapped[str] = mapped_column(String(20), default="password")  # password | mfa | forgot
+    ok: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+
+class Applicability(Base):
+    """A requirement marked not applicable, with the reason. The decision is itself filed as evidence."""
+    __tablename__ = "applicability"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("requirements.id"))
+    reason: Mapped[str] = mapped_column(Text)
+    decided_by: Mapped[str] = mapped_column(String(200))
+    decided_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id", ondelete="SET NULL"))
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime)
+    withdrawn_by: Mapped[str | None] = mapped_column(String(200))
+    requirement: Mapped[Requirement] = relationship()
+
+
+
+class Noncompliance(Base):
+    """A possible noncompliance: what happened, why, the risk, the mitigation, and what was reported."""
+    __tablename__ = "noncompliance"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("requirements.id"))
+    title: Mapped[str] = mapped_column(String(300))
+    description: Mapped[str] = mapped_column(Text)
+    discovered_on: Mapped[date] = mapped_column(Date)
+    discovered_how: Mapped[str] = mapped_column(String(60))
+    started_on: Mapped[date | None] = mapped_column(Date)  # when the noncompliance began
+    ended_on: Mapped[date | None] = mapped_column(Date)  # when compliance was restored
+    cause_category: Mapped[str | None] = mapped_column(String(30))  # People | Process | Technology | Vendor | Other
+    root_cause: Mapped[str | None] = mapped_column(Text)
+    risk: Mapped[str | None] = mapped_column(String(20))  # Minimal | Moderate | Serious
+    risk_rationale: Mapped[str | None] = mapped_column(Text)
+    disposition: Mapped[str] = mapped_column(String(40), default="Not yet decided")
+    submitted_on: Mapped[date | None] = mapped_column(Date)
+    tracking_id: Mapped[str | None] = mapped_column(String(80))  # Regional Entity's reference
+    status: Mapped[str] = mapped_column(String(20), default="Open")  # Open | Mitigating | Closed
+    closed_on: Mapped[date | None] = mapped_column(Date)
+    finding_id: Mapped[int | None] = mapped_column(ForeignKey("findings.id", ondelete="SET NULL"))
+    created_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    requirement: Mapped[Requirement] = relationship()
+    steps: Mapped[list["MitigationStep"]] = relationship(back_populates="item", cascade="all, delete-orphan",
+                                                         order_by="MitigationStep.id")
+
+
+class MitigationStep(Base):
+    __tablename__ = "mitigation_steps"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    noncompliance_id: Mapped[int] = mapped_column(ForeignKey("noncompliance.id", ondelete="CASCADE"))
+    text: Mapped[str] = mapped_column(Text)
+    owner: Mapped[str | None] = mapped_column(String(200))
+    due_on: Mapped[date | None] = mapped_column(Date)
+    completed_on: Mapped[date | None] = mapped_column(Date)
+    item: Mapped[Noncompliance] = relationship(back_populates="steps")
+
+
+audit_request_evidence = Table(
+    "audit_request_evidence", Base.metadata,
+    Column("request_id", ForeignKey("audit_requests.id", ondelete="CASCADE"), primary_key=True),
+    Column("evidence_id", ForeignKey("evidence.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class AuditRequest(Base):
+    """An evidence request from the Regional Entity during an audit (RFI / data request)."""
+    __tablename__ = "audit_requests"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    ref: Mapped[str] = mapped_column(String(40))  # e.g. RFI-07
+    received_on: Mapped[date] = mapped_column(Date)
+    due_on: Mapped[date] = mapped_column(Date)
+    requirement_id: Mapped[int | None] = mapped_column(ForeignKey("requirements.id"))
+    request: Mapped[str] = mapped_column(Text)
+    owner_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    status: Mapped[str] = mapped_column(String(20), default="Open")  # Open | In progress | Submitted | Closed
+    response: Mapped[str | None] = mapped_column(Text)
+    submitted_on: Mapped[date | None] = mapped_column(Date)
+    created_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    requirement: Mapped[Requirement | None] = relationship()
+    owner: Mapped[User | None] = relationship()
+    evidence: Mapped[list[Evidence]] = relationship(secondary=audit_request_evidence)
+
+
+class OffboardStep(Base):
+    """A manual step in offboarding a vendor; the automatic checks are computed live."""
+    __tablename__ = "offboard_steps"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(40))
+    done_at: Mapped[datetime | None] = mapped_column(DateTime)
+    done_by: Mapped[str | None] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(Text)
+
+
+class AccountReview(Base):
+    """Periodic review of every vendor account that can reach an asset."""
+    __tablename__ = "account_reviews"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"))
+    started_by: Mapped[str] = mapped_column(String(200))
+    started_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime)
+    completed_by: Mapped[str | None] = mapped_column(String(200))
+    evidence_id: Mapped[int | None] = mapped_column(ForeignKey("evidence.id", ondelete="SET NULL"))
+    items: Mapped[list["AccountReviewItem"]] = relationship(back_populates="review", cascade="all, delete-orphan",
+                                                            order_by="AccountReviewItem.id")
+
+
+class AccountReviewItem(Base):
+    __tablename__ = "account_review_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    review_id: Mapped[int] = mapped_column(ForeignKey("account_reviews.id", ondelete="CASCADE"))
+    access_id: Mapped[int | None] = mapped_column(ForeignKey("vendor_access.id", ondelete="SET NULL"))
+    label: Mapped[str] = mapped_column(String(300))  # vendor → asset (method)
+    account: Mapped[str] = mapped_column(String(200))
+    last_seen: Mapped[datetime | None] = mapped_column(DateTime)
+    decision: Mapped[str | None] = mapped_column(String(10))  # keep | remove
+    note: Mapped[str | None] = mapped_column(Text)
+    review: Mapped[AccountReview] = relationship(back_populates="items")
+
+
+
+class Membership(Base):
+    """A person's access to one utility. User.org_id / role / can_sign mirror the membership they're working in."""
+    __tablename__ = "memberships"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id", ondelete="CASCADE"), index=True)
+    role: Mapped[str] = mapped_column(String(20), default="editor")
+    can_sign: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    user: Mapped[User] = relationship()
+    org: Mapped[Organization] = relationship()
+
+
+class ReadinessItem(Base):
+    """Preparation for CIP-003-11 (effective July 1, 2029): one row per checklist item, per asset or org-wide."""
+    __tablename__ = "readiness_items"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    asset_id: Mapped[int | None] = mapped_column(ForeignKey("assets.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(30))
+    status: Mapped[str] = mapped_column(String(20), default="Not started")  # Not started | Planned | In place | Not applicable
+    method: Mapped[str | None] = mapped_column(Text)  # the control that will do it
+    owner: Mapped[str | None] = mapped_column(String(200))
+    target_date: Mapped[date | None] = mapped_column(Date)
+    updated_by: Mapped[str | None] = mapped_column(String(200))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+
+class BillingEvent(Base):
+    """Stripe webhook events already applied, so a retried delivery is applied once."""
+    __tablename__ = "billing_events"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(100))
+    org_id: Mapped[int | None] = mapped_column(Integer)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+
+
+class AiSuggestion(Base):
+    """A drafted text from the AI service. Nothing reaches a plan or RSAW response until a person accepts it."""
+    __tablename__ = "ai_suggestions"
+    id: Mapped[int] = mapped_column(primary_key=True)
+    org_id: Mapped[int] = mapped_column(ForeignKey("organizations.id"), index=True)
+    key: Mapped[str] = mapped_column(String(100), index=True)  # rsaw:<code> | plan:<section>
+    body: Mapped[str] = mapped_column(Text)
+    model: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(20), default="Pending")  # Pending | Accepted | Discarded
+    input_sha256: Mapped[str] = mapped_column(String(64))  # what was sent, for the record
+    created_by: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)
+    decided_by: Mapped[str | None] = mapped_column(String(200))
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime)

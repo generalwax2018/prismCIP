@@ -10,9 +10,41 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from .models import AccessSession, Asset, Evidence, Finding, Organization, Requirement, VendorAccess, utcnow
+from .models import (AccessSession, Applicability, Asset, Evidence, Finding, Organization, Requirement, VendorAccess,
+                     utcnow)
 
 DUE_SOON_DAYS = 60
+
+# Requirements that can genuinely not apply to a low impact entity, and the record that would contradict N/A.
+NA_ALLOWED = {
+    "CIP-003 Att1 S3.1": "no asset has routable communication crossing its boundary",
+    "CIP-003 Att1 S3.2": "no asset has dial-up connectivity",
+    "CIP-003 Att1 S6.1": "no asset allows vendor electronic remote access",
+    "CIP-003 Att1 S6.2": "no asset allows vendor electronic remote access",
+    "CIP-003 Att1 S6.3": "no asset allows vendor electronic remote access",
+    "CIP-003 R4": "the CIP Senior Manager has not delegated authority",
+}
+
+
+def current_evidence(q):
+    """Evidence that hasn't been replaced by a newer version."""
+    return q.filter(Evidence.superseded_by_id.is_(None))
+
+
+def na_contradiction(db: Session, org: Organization, code: str) -> str | None:
+    assets = db.query(Asset).filter_by(org_id=org.id).all()
+    if code == "CIP-003 Att1 S3.1" and any(a.routable_external for a in assets):
+        return "Marked N/A, but " + ", ".join(a.name for a in assets if a.routable_external) + " has routable external connectivity."
+    if code == "CIP-003 Att1 S3.2" and any(a.dialup for a in assets):
+        return "Marked N/A, but " + ", ".join(a.name for a in assets if a.dialup) + " has dial-up."
+    if code.startswith("CIP-003 Att1 S6") and any(a.vendor_remote_access_allowed for a in assets):
+        return "Marked N/A, but " + ", ".join(a.name for a in assets if a.vendor_remote_access_allowed) + \
+            " allows vendor remote access."
+    if code == "CIP-003 R4":
+        from .models import Delegation
+        if db.query(Delegation).filter_by(org_id=org.id, revoked_on=None).count():
+            return "Marked N/A, but active delegations are recorded in Settings."
+    return None
 RETENTION_YEARS = 3
 
 
@@ -30,10 +62,11 @@ class ReqStatus:
     due: date | None = None
     evidence_count: int = 0
     gaps: list[str] = field(default_factory=list)
+    na: "Applicability | None" = None
 
     @property
     def css(self):
-        return {"Current": "ok", "Documented": "ok", "Due soon": "warn", "Overdue": "bad",
+        return {"Current": "ok", "Documented": "ok", "Not applicable": "ok", "Due soon": "warn", "Overdue": "bad",
                 "No evidence": "bad", "Gap": "warn"}[self.status]
 
 
@@ -96,15 +129,24 @@ def requirement_statuses(db: Session, org: Organization, today: date | None = No
     last_test = None
     test_req = next((r for r in reqs if r.code == "CIP-003 Att1 S4.5"), None)
     if test_req:
-        t = (db.query(Evidence).filter_by(org_id=org.id, requirement_id=test_req.id)
+        t = (current_evidence(db.query(Evidence).filter_by(org_id=org.id, requirement_id=test_req.id))
              .order_by(Evidence.performed_on.desc()).first())
         last_test = t.performed_on if t else None
+    nas = {a.requirement_id: a for a in db.query(Applicability).filter_by(org_id=org.id, withdrawn_at=None).all()}
     for req in reqs:
-        ev = (db.query(Evidence).filter_by(org_id=org.id, requirement_id=req.id)
+        ev = (current_evidence(db.query(Evidence).filter_by(org_id=org.id, requirement_id=req.id))
               .order_by(Evidence.performed_on.desc()).all())
         last = ev[0].performed_on if ev else None
         st = ReqStatus(req=req, status="No evidence", last_performed=last, evidence_count=len(ev),
                        gaps=gaps.get(req.code, []))
+        if req.id in nas:
+            st.na = nas[req.id]
+            clash = na_contradiction(db, org, req.code)
+            # Gaps from the records still matter (e.g. a vendor access path exists), so N/A doesn't hide them.
+            st.gaps = ([clash] if clash else []) + st.gaps
+            st.status = "Gap" if st.gaps else "Not applicable"
+            out.append(st)
+            continue
         if req.code == "CIP-003 Att1 S4.6":
             # Event-driven: after a test, the plan update (if any is needed) is due within 180 calendar days.
             if last_test and not (last and last >= last_test):

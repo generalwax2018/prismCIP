@@ -7,8 +7,13 @@ review. Parsers never trust the input: unknown lines are skipped and counted, no
 Supported:
   * FortiGate event logs (key=value syslog or exported .log): SSL VPN tunnel-up/down (0101039947 / 0101039948)
     and IPsec dial-up tunnel-up/down with xauthuser. Up/down events are paired by tunnelid.
+  * Palo Alto GlobalProtect syslog (PAN-OS 9.1.3+ field order): gateway-connected / gateway-logout events,
+    paired by user and public IP; a logout without its connect uses the login duration.
   * CSV exports from VPN or remote-support tools (GlobalProtect, BeyondTrust, Secomea, TeamViewer, ...):
     columns are detected by name (user/account, start/login, end/logout, source ip).
+
+Live syslog delivers a tunnel's start and end in different batches, so reconcile() closes a matching open session
+instead of creating a second one.
 """
 from __future__ import annotations
 
@@ -37,6 +42,7 @@ class Record:
     source_ip: str | None = None
     device: str | None = None
     key: str = ""
+    end_only: bool = False  # built from a disconnect event; its start is estimated from the duration
 
     def finalize(self):
         if not self.key:
@@ -110,7 +116,70 @@ def parse_fortigate(text: str) -> ParseResult:
             if rec is None:  # down without an up in this file: rebuild the start from duration
                 dur = int(f["duration"]) if f.get("duration", "").isdigit() else 0
                 rec = Record(account=user, started_at=when - timedelta(seconds=dur), source_ip=f.get("remip"),
-                             device=device)
+                             device=device, end_only=True)
+                res.records.append(rec)
+            rec.ended_at = when
+    for r in res.records:
+        r.finalize()
+    return res
+
+
+def _pan_time(fields: list[str], i: int) -> datetime | None:
+    """High-resolution time carries its UTC offset; plain PAN-OS times are firewall-local (treated as UTC)."""
+    hi = fields[i + 33] if len(fields) > i + 33 else ""
+    for v in (hi, fields[i + 3] if len(fields) > i + 3 else ""):
+        v = (v or "").strip()
+        if not v:
+            continue
+        try:
+            return _to_utc(datetime.fromisoformat(v.replace("Z", "+00:00")))
+        except ValueError:
+            pass
+        try:
+            return datetime.strptime(v, "%Y/%m/%d %H:%M:%S")
+        except ValueError:
+            continue
+    return None
+
+
+def parse_globalprotect(text: str) -> ParseResult:
+    res = ParseResult()
+    open_: dict[str, Record] = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        res.lines += 1
+        try:
+            fields = next(csv.reader([line]))
+        except (csv.Error, StopIteration):
+            res.skipped += 1
+            continue
+        try:
+            i = fields.index("GLOBALPROTECT")  # type field; the CSV starts 3 fields before it
+        except ValueError:
+            res.skipped += 1
+            continue
+        g = lambda n: fields[i + n].strip() if len(fields) > i + n else ""  # noqa: E731
+        event, user, status = g(5), g(9), g(25).lower()
+        if event not in ("gateway-connected", "gateway-logout") or not user or (status and status != "success"):
+            res.skipped += 1
+            continue
+        when = _pan_time(fields, i)
+        if not when:
+            res.skipped += 1
+            continue
+        device, ip = g(-1) or "panos", g(12)
+        ref = f"{device}|{user.lower()}|{ip}"
+        if event == "gateway-connected":
+            rec = Record(account=user.split("\\")[-1], started_at=when, source_ip=ip or None, device=device)
+            open_[ref] = rec
+            res.records.append(rec)
+        else:
+            rec = open_.pop(ref, None)
+            if rec is None:
+                dur = int(g(27)) if g(27).isdigit() else 0
+                rec = Record(account=user.split("\\")[-1], started_at=when - timedelta(seconds=dur),
+                             source_ip=ip or None, device=device, end_only=True)
                 res.records.append(rec)
             rec.ended_at = when
     for r in res.records:
@@ -180,11 +249,19 @@ def parse_csv(text: str) -> ParseResult:
     return res
 
 
+PARSERS = {"fortigate": parse_fortigate, "globalprotect": parse_globalprotect, "csv": parse_csv}
+
+
 def detect_and_parse(text: str, fmt: str = "auto") -> tuple[str, ParseResult]:
     if fmt == "auto":
         head = text[:4000]
-        fmt = "fortigate" if ("logid=" in head and "subtype=" in head) else "csv"
-    return fmt, (parse_fortigate(text) if fmt == "fortigate" else parse_csv(text))
+        if "logid=" in head and "subtype=" in head:
+            fmt = "fortigate"
+        elif ",GLOBALPROTECT," in head:
+            fmt = "globalprotect"
+        else:
+            fmt = "csv"
+    return fmt, PARSERS.get(fmt, parse_csv)(text)
 
 
 # ---------------- reconciliation ----------------
@@ -215,10 +292,45 @@ def reconcile(db: Session, org: Organization, records: list[Record], batch: Impo
         acct = r.account.strip().lower()
         if acct in ignored:
             continue
-        if db.query(AccessSession).filter_by(org_id=org.id, external_key=r.key).first():
-            batch.duplicates += 1
+        same = db.query(AccessSession).filter_by(org_id=org.id, external_key=r.key).first()
+        if same:
+            if same.ended_at is None and r.ended_at:  # the end of a session whose start came in earlier
+                same.ended_at, same.ended_by = r.ended_at, "log import"
+                same.end_reason = same.end_reason or "Completed"
+                batch.sessions_matched += 1
+            else:
+                batch.duplicates += 1
             continue
         matches = by_account.get(acct, [])
+        if matches and r.ended_at:
+            # The start of this session may have come in an earlier batch: close that open session instead.
+            prior = (db.query(AccessSession)
+                     .filter(AccessSession.org_id == org.id, AccessSession.access_id.in_([m.id for m in matches]),
+                             AccessSession.ended_at.is_(None), AccessSession.account.ilike(r.account),
+                             AccessSession.started_at >= r.started_at - timedelta(minutes=10),
+                             AccessSession.started_at <= r.started_at + timedelta(minutes=10))
+                     .order_by(AccessSession.started_at.desc()).first())
+            if prior and r.end_only:
+                prior.ended_at, prior.ended_by = r.ended_at, "log import"
+                prior.end_reason = prior.end_reason or "Completed"
+                batch.sessions_matched += 1
+                if r.ended_at - prior.started_at > LONG_SESSION:
+                    _open_finding(db, org.id, new_findings, kind="long_session", severity="low",
+                                  title=f"{prior.access.vendor.name} → {prior.access.asset.name}: session longer "
+                                        f"than 12 hours", detail=f"{r.account}: {prior.started_at:%Y-%m-%d %H:%M} → "
+                                                                 f"{r.ended_at:%Y-%m-%d %H:%M} UTC.",
+                                  code="CIP-003 Att1 S6.2", access_id=prior.access_id, session_id=prior.id,
+                                  dedupe=f"long:{prior.external_key or prior.id}")
+                window = db.get(AccessApproval, prior.approval_id) if prior.approval_id else None
+                if window and r.ended_at > window.ends_at + APPROVAL_GRACE:
+                    _open_finding(db, org.id, new_findings, kind="overrun", severity="medium",
+                                  title=f"{prior.access.vendor.name} → {prior.access.asset.name}: session ran past its "
+                                        f"approved window",
+                                  detail=f"{r.account} stayed connected until {r.ended_at:%Y-%m-%d %H:%M} UTC; the "
+                                         f"window ended {window.ends_at:%Y-%m-%d %H:%M} UTC.",
+                                  code="CIP-003 Att1 S6.2", access_id=prior.access_id, session_id=prior.id,
+                                  dedupe=f"overrun:{prior.external_key or prior.id}")
+                continue
         if not matches:
             _open_finding(db, org.id, new_findings, kind="unmapped_account", severity="medium",
                           title=f"Remote access by unmapped account '{r.account}'",

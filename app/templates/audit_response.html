@@ -1,0 +1,10 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{{ r.ref }} response — {{ org.name }}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:860px;margin:2rem auto;color:#1b2330;line-height:1.5}.box{border:1px solid #cfd5dd;border-radius:6px;padding:.6rem .8rem;white-space:pre-wrap;background:#fafbfc}table{border-collapse:collapse;width:100%}th,td{border:1px solid #d5dbe2;padding:.35rem .5rem;text-align:left;font-size:13px}th{background:#eef1f5}</style></head><body>
+<h1>Response to {{ r.ref }}</h1>
+<p>{{ org.name }}{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}{% if org.audit_id %} · Audit {{ org.audit_id }}{% endif %}<br>Received {{ r.received_on }} · due {{ r.due_on }}{% if r.submitted_on %} · submitted {{ r.submitted_on }}{% endif %}</p>
+<h2>Request</h2><div class="box">{{ r.request }}</div>
+<h2>Response</h2><div class="box">{{ r.response or '' }}</div>
+<h2>Files</h2>
+<table><tr><th>File</th><th>Title</th><th>Requirement</th><th>Date</th><th>SHA-256</th></tr>
+{% for e, name in files %}<tr><td>{% if name %}<a href="{{ name }}">{{ name }}</a>{% else %}record only{% endif %}</td><td>{{ e.title }}</td><td>{{ e.requirement.code }}</td><td>{{ e.performed_on }}</td><td style="font-family:monospace;font-size:11px">{{ e.sha256 or '' }}</td></tr>{% endfor %}</table>
+</body></html>

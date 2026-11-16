@@ -1,0 +1,27 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Account review{% endblock %}
+{% block content %}
+<header class="head"><div><h1>Vendor account review</h1>
+<p class="sub">Every {{ user.org.account_review_months }} month(s), confirm each vendor account that can reach an asset is still needed. Accounts marked remove are taken off the access path; delete them on the firewall or tool too. The finished review is filed as Section 6.1 evidence.</p>
+<p class="small">{% if due %}Next review due by <b>{{ due }}</b>{% else %}No review completed yet{% endif %}</p></div>
+{% if not review and user.role != 'viewer' %}<form method="post" class="head-actions">{{ csrf_field() }}<input type="hidden" name="action" value="start"><button>Start a review</button></form>{% endif %}</header>
+{% if review %}
+<form method="post" class="card">{{ csrf_field() }}
+<div class="card-head"><h2>Review started {{ review.started_at.strftime('%Y-%m-%d') }} by {{ review.started_by }}</h2></div>
+{% if review.items %}<table><tr><th>Access path</th><th>Account</th><th>Last used</th><th>Decision</th><th>Note</th></tr>
+{% for it in review.items %}<tr><td class="small">{{ it.label }}</td><td class="mono">{{ it.account }}</td><td class="mono small">{{ it.last_seen.strftime('%Y-%m-%d') if it.last_seen else 'never seen' }}</td>
+<td class="small"><label class="inline-radio"><input type="radio" name="decision_{{ it.id }}" value="keep" {{ 'checked' if it.decision == 'keep' }}> Keep</label> <label class="inline-radio"><input type="radio" name="decision_{{ it.id }}" value="remove" {{ 'checked' if it.decision == 'remove' }}> Remove</label></td>
+<td><input type="text" name="note_{{ it.id }}" value="{{ it.note or '' }}"></td></tr>{% endfor %}</table>
+{% else %}<p class="muted">No vendor accounts are listed on any access path.</p>{% endif %}
+{% if user.role != 'viewer' %}<div class="actions"><button class="secondary" name="action" value="decide">Save progress</button><button name="action" value="complete">Complete review</button></div>{% endif %}
+</form>
+{% endif %}
+<div class="grid g2">
+<div><h2 class="section-title">Past reviews</h2>
+{% if history %}<table><tr><th>Completed</th><th>By</th><th>Accounts</th><th>Removed</th></tr>
+{% for h in history %}<tr><td class="mono">{{ h.completed_at.strftime('%Y-%m-%d') }}</td><td class="small">{{ h.completed_by }}</td><td class="num">{{ h.items|length }}</td><td class="num">{{ h.items|selectattr('decision','equalto','remove')|list|length }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">None yet.</div>{% endif %}</div>
+{% if user.role != 'viewer' %}<div class="card"><div class="card-head"><h2>Cadence</h2></div>
+<form method="post" action="/settings/review-cadence" class="row">{{ csrf_field() }}<div><label>Review every (months)</label><input type="text" name="months" value="{{ user.org.account_review_months }}" inputmode="numeric"></div><div><button class="secondary">Save</button></div></form></div>{% endif %}
+</div>
+{% endblock %}

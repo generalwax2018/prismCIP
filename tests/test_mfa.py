@@ -19,7 +19,7 @@ def _csrf(c, url):
 
 def test_enroll_login_and_replay_block():
     with SessionLocal() as db:
-        org = db.query(Organization).first() or Organization(name="MFA Co-op")
+        org = db.query(Organization).order_by(Organization.id).first() or Organization(name="MFA Co-op")
         if not org.id:
             db.add(org)
             db.flush()

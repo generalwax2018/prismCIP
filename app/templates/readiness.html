@@ -1,0 +1,43 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}CIP-003-11 readiness{% endblock %}
+{% macro tone(st) %}{{ {'In place':'ok','Planned':'warn','Not applicable':'neutral','Not started':'bad'}[st] }}{% endmacro %}
+{% macro fields(key, row) %}
+<td><select name="status_{{ key }}" aria-label="Status">{% for st in statuses %}<option {{ 'selected' if (row.status if row else 'Not started') == st }}>{{ st }}</option>{% endfor %}</select></td>
+<td><input type="text" name="method_{{ key }}" value="{{ row.method if row and row.method else '' }}" placeholder="Control or product" aria-label="Method"></td>
+<td><input type="text" name="owner_{{ key }}" value="{{ row.owner if row and row.owner else '' }}" aria-label="Owner"></td>
+<td><input type="date" name="target_{{ key }}" value="{{ row.target_date if row and row.target_date else '' }}" aria-label="Target date"></td>
+{% endmacro %}
+{% block content %}
+<header class="head"><div><h1>CIP-003-11 readiness</h1>
+<p class="sub">CIP-003-11 takes effect {{ effective.strftime('%B %-d, %Y') }}. It moves the Section 6 vendor controls into Section 3 and adds detection, user authentication and credential protection for all routable access to low impact sites. Track what each site needs and who's doing it.</p></div>
+<div class="actions"><a class="btn secondary" href="/readiness.csv">{{ icon('download', 16) }} Export CSV</a></div></header>
+
+<div class="kpis">
+<div class="kpi"><div class="label">Days until effective</div><div class="num">{{ days_left if days_left > 0 else 'In effect' }}</div><div class="hint">{{ effective }}</div></div>
+<div class="kpi ok"><div class="label">In place</div><div class="num">{{ done }} / {{ total }}</div><progress max="{{ total or 1 }}" value="{{ done }}" aria-label="Items in place"></progress></div>
+<div class="kpi warn"><div class="label">Planned</div><div class="num">{{ planned }}</div><div class="hint">with an owner or date</div></div>
+<div class="kpi {{ 'bad' if overdue else '' }}"><div class="label">Past target date</div><div class="num">{{ overdue|length }}</div><div class="hint">not yet in place</div></div>
+</div>
+
+<div class="card" id="org"><div class="card-head"><h2>Across the organization</h2></div>
+<form method="post" action="/readiness">{{ csrf_field() }}
+<div class="scroll-x"><table class="ready"><tr><th>Item</th><th>Status</th><th>How</th><th>Owner</th><th>Target</th></tr>
+{% for i in org_rows %}<tr><td><b>{{ i.title }}</b> <span class="small muted">{{ i.code }}</span><div class="small muted">{{ i.summary }}</div></td>{{ fields(i.key, i.row) }}</tr>{% endfor %}
+</table></div>
+{% if user.role != 'viewer' %}<div class="actions"><button class="secondary">Save</button></div>{% endif %}</form></div>
+
+{% for pa in per_asset if pa.rows %}
+<div class="card" id="a{{ pa.asset.id }}"><div class="card-head"><h2><a href="/assets/{{ pa.asset.id }}">{{ pa.asset.name }}</a></h2>
+{% set done_here = pa.rows|selectattr('row')|map(attribute='row')|selectattr('status', 'equalto', 'In place')|list|length %}{{ pill(done_here ~ ' of ' ~ pa.rows|length ~ ' in place', 'ok' if done_here == pa.rows|length else 'neutral') }}</div>
+<form method="post" action="/readiness">{{ csrf_field() }}<input type="hidden" name="asset_id" value="{{ pa.asset.id }}">
+<div class="scroll-x"><table class="ready"><tr><th>Attachment 1</th><th>Status</th><th>How</th><th>Owner</th><th>Target</th></tr>
+{% for i in pa.rows %}<tr><td><b>{{ i.key }} {{ i.title }}</b><div class="small muted">{{ i.summary }}</div>
+{% if i.hint %}<div class="small hint-{{ i.hint[1] }}">{{ i.hint[0] }}</div>{% endif %}</td>{{ fields(i.key, i.row) }}</tr>{% endfor %}
+</table></div>
+{% if user.role != 'viewer' %}<div class="actions"><button class="secondary">Save</button></div>{% endif %}</form></div>
+{% endfor %}
+
+{% if out_of_scope %}<div class="card"><div class="card-head"><h2>No Section 3 items</h2></div>
+<p class="small muted m0">No routable external connectivity or dial-up recorded for: {% for a in out_of_scope %}<a href="/assets/{{ a.id }}">{{ a.name }}</a>{{ ', ' if not loop.last }}{% endfor %}. If that changes, update the asset and its items appear here.</p></div>{% endif %}
+<p class="small muted">Summaries of CIP-003-11 are paraphrased. Work from the standard and its implementation plan on nerc.com.</p>
+{% endblock %}

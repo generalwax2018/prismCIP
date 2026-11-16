@@ -5,9 +5,13 @@
   <div class="app-icon lg">{{ icon('diamond', 28, 2) }}</div>
   <h1>Sign in</h1>
   <p class="sub">PrismCIP · NERC CIP low impact compliance.</p>
+  {% if notice %}<p class="small" role="status">{{ notice }}</p>{% endif %}
   {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
   <label>Email</label><input type="email" name="email" required autofocus>
   <label>Password</label><input type="password" name="password" required>
   <button>Sign in</button>
+  <p class="small muted"><a href="/forgot">Forgot password?</a></p>
+  {% if hosted %}<p class="small muted">New here? <a href="/signup">Start a free trial</a></p>{% endif %}
+  {% if sso %}<a class="btn secondary sso-btn" href="/login/sso">Sign in with single sign-on</a>{% endif %}
 </form>
 {% endblock %}

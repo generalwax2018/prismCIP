@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<config version="11.1.0">
+  <devices><entry name="localhost.localdomain"><vsys><entry name="vsys1">
+    <rulebase><security><rules>
+      <entry name="SCADA-to-RTU">
+        <from><member>ctrl</member></from><to><member>substation</member></to>
+        <source><member>SCADA-Master</member></source><destination><member>EastSub-RTU</member></destination>
+        <source-user><member>any</member></source-user>
+        <application><member>dnp3</member></application><service><member>application-default</member></service>
+        <action>allow</action><log-end>yes</log-end>
+        <description>DNP3 polling from control center, CHG-2210</description>
+      </entry>
+      <entry name="GP-vendors-to-relays">
+        <from><member>gp-vendors</member></from><to><member>substation</member></to>
+        <source><member>any</member></source><destination><member>EastSub-Relays</member></destination>
+        <source-user><member>cn=vendors,ou=groups,dc=coop,dc=local</member></source-user>
+        <application><member>ssh</member><member>ssl</member></application><service><member>application-default</member></service>
+        <action>allow</action><log-end>yes</log-end>
+      </entry>
+      <entry name="temp-allow-all">
+        <from><member>any</member></from><to><member>substation</member></to>
+        <source><member>any</member></source><destination><member>any</member></destination>
+        <source-user><member>any</member></source-user>
+        <application><member>any</member></application><service><member>any</member></service>
+        <action>allow</action><log-end>no</log-end>
+      </entry>
+      <entry name="old-disabled">
+        <from><member>any</member></from><to><member>any</member></to><source><member>any</member></source>
+        <destination><member>any</member></destination><application><member>any</member></application>
+        <service><member>any</member></service><action>allow</action><disabled>yes</disabled>
+      </entry>
+    </rules></security></rulebase>
+  </entry></vsys></entry></devices>
+</config>

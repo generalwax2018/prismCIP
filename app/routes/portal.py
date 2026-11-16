@@ -98,8 +98,9 @@ async def portal_request(token: str, request: Request, db: Session = Depends(get
     db.add(AuditLog(org_id=v.org_id, actor=f"vendor portal: {v.name}", action="access_window_requested",
                     detail=f"{person} for {path.asset.name}, {start:%Y-%m-%d %H:%M}–{end:%Y-%m-%d %H:%M} UTC: {purpose}"))
     db.commit()
-    to = [u.email for u in db.query(User).filter_by(org_id=v.org_id, active=True, notify=True).all()
-          if u.role in ("admin", "editor")]
+    from ..members import members
+    to = [u.email for u, m in members(db, v.org_id, active_only=True, notify_only=True)
+          if m.role in ("admin", "editor")]
     try:
         mailer.send(to, f"PrismCIP: {v.name} requests remote access to {path.asset.name}",
                     f"{person} ({v.name}) asks for access to {path.asset.name} via {path.access_method}\n"

@@ -1,7 +1,8 @@
 {% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
 {% block title %}{{ v.name }}{% endblock %}
 {% block content %}
-<p class="small"><a href="/vendors">← Vendors</a></p><h1>{{ v.name }}</h1><p class="sub">{{ v.contact or '' }}</p>
+<p class="small"><a href="/vendors">← Vendors</a></p><header class="head"><div><h1>{{ v.name }}</h1><p class="sub">{{ v.contact or '' }}{% if v.contract_end %} · contract ends {{ v.contract_end }}{% endif %}</p></div>
+<div class="head-actions">{{ pill(v.status, {'Active':'neutral','Offboarding':'warn','Offboarded':'ok'}[v.status]) }}<a class="btn secondary" href="/vendors/{{ v.id }}/offboard">{{ 'Offboarding checklist' if v.status != 'Active' else 'Offboard vendor' }}</a></div></header>
 <div class="grid g2">
 <div class="card"><form method="post" class="stack">{{ csrf_field() }}
 <label>Name</label><input type="text" name="name" value="{{ v.name }}" required>

@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Set a new password{% endblock %}
+{% block bare %}
+<form method="post" class="login-card stack">{{ csrf_field() }}
+  <div class="app-icon lg">{{ icon('diamond', 28, 2) }}</div>
+  <h1>Set a new password</h1>
+  {% if expired %}<p class="sub">This link has expired or was already used. <a href="/forgot">Request a new one.</a></p>
+  {% else %}
+  {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
+  <label>New password <span class="hint">12+ characters</span></label><input type="password" name="new_password" minlength="12" required autocomplete="new-password" autofocus>
+  <label>Again</label><input type="password" name="confirm" minlength="12" required autocomplete="new-password">
+  <button>Save password</button>
+  {% endif %}
+</form>
+{% endblock %}

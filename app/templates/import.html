@@ -11,7 +11,7 @@
 {% if user.role != 'viewer' %}
 <form method="post" enctype="multipart/form-data" class="stack">{{ csrf_field() }}
 <label>Format</label>
-<select name="format"><option value="auto">Detect automatically</option><option value="fortigate">FortiGate event log (syslog key=value)</option><option value="csv">CSV export (GlobalProtect, BeyondTrust, Secomea, …)</option></select>
+<select name="format"><option value="auto">Detect automatically</option><option value="fortigate">FortiGate event log (syslog key=value)</option><option value="globalprotect">Palo Alto GlobalProtect log (syslog CSV)</option><option value="csv">CSV export (GlobalProtect, BeyondTrust, Secomea, …)</option></select>
 <label>File <span class="hint">.log, .txt or .csv · up to 20 MB</span></label><input type="file" name="file" required>
 <div class="actions"><button>{{ icon('upload', 15) }}Import</button></div>
 </form>
@@ -20,10 +20,15 @@
 <div class="card">
 <div class="card-head"><h2>What's understood</h2></div>
 <p class="small"><b>FortiGate:</b> SSL VPN and IPsec dial-up <span class="mono">tunnel-up</span> / <span class="mono">tunnel-down</span> events, paired by tunnel ID. Export from Log &amp; Report → VPN Events, or forward syslog.</p>
+<p class="small"><b>Palo Alto:</b> GlobalProtect <span class="mono">gateway-connected</span> / <span class="mono">gateway-logout</span> events (PAN-OS 9.1.3+ syslog field order).</p>
 <p class="small"><b>CSV:</b> any export with a user/account column and a start/login time column. End time and source IP are used when present.</p>
 <p class="small"><b>Automatic:</b> post logs to the API with a token from Settings:</p>
 <div class="code">curl -X POST -H "Authorization: Bearer pcip_…"   --data-binary @vpn-events.log   https://your-prismcip/api/v1/sessions</div>
 </div>
+</div>
+<div class="card"><div class="card-head"><h2>Live syslog</h2>{{ pill('Listening on ' ~ syslog.port, 'ok') if syslog.listening else pill('Off', 'neutral') }}</div>
+{% if syslog.listening %}<p class="small m0">{{ syslog.received }} lines received · {{ syslog.accepted }} VPN events · {{ syslog.dropped_sender }} from unlisted senders dropped · {{ syslog.sessions_new }} sessions · {{ syslog.findings_new }} findings{% if syslog.last_error %} · <span class="red">last error: {{ syslog.last_error }}</span>{% endif %}</p>
+{% else %}<p class="small m0">Point the firewall's syslog at PrismCIP so sessions arrive as they happen. Set <span class="mono">PRISMCIP_SYSLOG_PORT</span> (e.g. 5514) and <span class="mono">PRISMCIP_SYSLOG_SOURCES</span> (the firewall IPs) and restart. Keep the port reachable only from the firewalls.</p>{% endif %}
 </div>
 <h2 class="section-title">Recent imports</h2>
 {% if batches %}

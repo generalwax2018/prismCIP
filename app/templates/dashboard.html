@@ -11,10 +11,11 @@
   <div class="kpi"><div class="label">Assets / vendor paths</div><div class="num">{{ n_assets }} / {{ n_paths }}</div><div class="hint">enabled remote access paths</div></div>
 </div>
 
-{% if access_requests or my_signoffs %}
+{% if access_requests or my_signoffs or rfis %}
 <div class="card s6"><div class="card-head"><h2>Waiting on you</h2></div>
 {% for w in access_requests %}<div class="req-line"><a href="/access/{{ w.access.id }}"><b>{{ w.access.vendor.name }} → {{ w.access.asset.name }}</b></a> {{ pill('Access request', 'warn') }}
 <span class="small muted">{{ w.requested_by }} · {{ w.starts_at.strftime('%Y-%m-%d %H:%M') }}–{{ w.ends_at.strftime('%Y-%m-%d %H:%M') }} UTC · {{ w.purpose }}</span></div>{% endfor %}
+{% for r in rfis %}<div class="req-line"><a href="/audit-requests/{{ r.id }}"><b>{{ r.ref }}</b></a> {{ pill('Overdue' if r.due_on < today else 'Audit request due ' ~ r.due_on, 'bad' if r.due_on < today else 'warn') }} <span class="small muted">{{ r.owner.name if r.owner else 'no owner' }} · {{ r.request|truncate(80) }}</span></div>{% endfor %}
 {% for so in my_signoffs %}<div class="req-line"><a href="/signoffs/{{ so.id }}"><b>{{ so.title }}</b></a> {{ pill('Sign-off', 'warn') }} <span class="small muted">requested by {{ so.requested_by }}</span></div>{% endfor %}
 </div>{% endif %}
 

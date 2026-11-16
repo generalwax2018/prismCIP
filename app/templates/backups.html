@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Backups{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/settings">← Settings</a></p>
+<header class="head"><div><h1>Backups</h1>
+<p class="sub">Database snapshot, every evidence file and a hash manifest. {{ 'Daily after ' ~ hour ~ ':00 server time.' if scheduled else 'The daily job is off (PRISMCIP_BACKUPS=off).' }} Keeps the 14 newest plus one per month for 36 months.</p></div>
+<form method="post" class="head-actions">{{ csrf_field() }}<button>Back up now</button></form></header>
+<div class="grid g2">
+<div class="card"><div class="card-head"><h2>Where they go</h2></div>
+<p class="small m0 mono wrap-any">{{ dest }}</p>
+<p class="small">{{ pill('Encrypted', 'ok') if encrypted else pill('Not encrypted', 'warn') }} {% if not encrypted %}Set <span class="mono">PRISMCIP_BACKUP_PASSPHRASE</span> to encrypt them.{% endif %}</p>
+<p class="small muted m0">Copies on the same disk don't survive a disk failure. Point <span class="mono">PRISMCIP_BACKUP_DIR</span> at another disk or a mounted share, or copy the files off the server.</p></div>
+<div class="card"><div class="card-head"><h2>Restore</h2></div>
+<p class="small m0">Restores run from the command line, never from the web page:</p>
+<div class="code">python -m scripts.backup verify FILE
+python -m scripts.backup restore FILE NEW_EMPTY_FOLDER</div>
+<p class="small muted m0">Then stop the app, point PRISMCIP_DATA_DIR at the new folder, and start it.</p></div>
+</div>
+{% if result %}<div class="flash {{ '' if result.ok else 'err' }}">{{ result.name }}: {{ 'verified — all ' ~ result.files ~ ' files match the manifest' if result.ok else 'FAILED: ' ~ (result.problems|join('; ')) }}</div>{% endif %}
+{% if items %}<table><tr><th>Backup</th><th>Size</th><th></th></tr>
+{% for b in items %}<tr><td class="mono">{{ b.name }}</td><td class="num">{{ '{:,.1f} MB'.format(b.size / 1048576) }}</td>
+<td><form method="post" class="inline">{{ csrf_field() }}<input type="hidden" name="action" value="verify"><input type="hidden" name="name" value="{{ b.name }}"><button class="secondary small-btn">Verify</button></form>
+<a class="btn secondary small-btn" href="/settings/backups/{{ b.name }}">Download</a></td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">No backups yet.</div>{% endif %}
+{% endblock %}

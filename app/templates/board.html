@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Board report{% endblock %}
+{% block content %}
+<header class="head noprint"><div><h1>Board report</h1><p class="sub">One page for the general manager to hand to the board. Plain language, no compliance jargon beyond what's needed.</p></div>
+<div class="head-actions"><a class="btn secondary" href="/reports/board/download">{{ icon('download', 15) }}Download</a><button type="button" data-print>Print / save PDF</button></div></header>
+{% include "_board_body.html" %}
+{% endblock %}

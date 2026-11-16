@@ -1,0 +1,15 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Reset password{% endblock %}
+{% block bare %}
+<form method="post" action="/forgot" class="login-card stack">{{ csrf_field() }}
+  <div class="app-icon lg">{{ icon('diamond', 28, 2) }}</div>
+  <h1>Reset password</h1>
+  {% if sent %}<p class="sub">{{ sent }}</p><p class="small"><a href="/login">Back to sign in</a></p>
+  {% else %}
+  <p class="sub">Enter your email and we'll send a link to set a new password.</p>
+  <label>Email</label><input type="email" name="email" required autofocus>
+  <button>Send reset link</button>
+  <p class="small muted"><a href="/login">Back to sign in</a></p>
+  {% endif %}
+</form>
+{% endblock %}

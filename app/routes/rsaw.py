@@ -24,7 +24,9 @@ def _save(db, user, code, body):
 @router.get("/rsaw")
 def rsaw_page(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     ids = {r.code: r.id for r in db.query(Requirement).all()}
-    return render(request, "rsaw.html", user, ids=ids, **workbook(db, user.org))
+    from .. import ai
+    return render(request, "rsaw.html", user, ids=ids, ai_on=ai.enabled(user.org),
+                  suggestions=ai.pending(db, user.org_id, "rsaw:"), **workbook(db, user.org))
 
 
 @router.post("/rsaw/{rid}", dependencies=[Depends(csrf_protect)])
@@ -57,7 +59,13 @@ def rsaw_draft_all(request: Request, user: User = Depends(editor), db: Session =
 
 @router.get("/rsaw/export")
 def rsaw_export(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from ..models import Evidence
+    from .evidence import lock_evidence
     html = render_export(db, user.org)
+    n = lock_evidence(db.query(Evidence).filter_by(org_id=user.org_id, superseded_by_id=None).all(),
+                      f"Listed in RSAW workbook exported {utcnow():%Y-%m-%d}")
+    audit(db, user, "rsaw_exported", f"{n} evidence item(s) newly locked")
+    db.commit()
     return Response(html, media_type="text/html", headers={
         "Content-Disposition": f'attachment; filename="PrismCIP_RSAW_workbook_{utcnow():%Y-%m-%d}.html"'})
 

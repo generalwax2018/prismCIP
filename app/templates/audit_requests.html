@@ -1,0 +1,21 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Audit requests{% endblock %}
+{% block content %}
+<header class="head"><div><h1>Audit requests</h1>
+<p class="sub">Each evidence request (RFI) from the Regional Entity: who owns it, when it's due, the response and the files sent. Submitting locks the files that went out.</p></div></header>
+<div class="grid g2">
+<div>{% if rows %}<table><tr><th>Ref</th><th>Request</th><th>Owner</th><th>Due</th><th>Status</th></tr>
+{% for r in rows %}<tr><td class="mono"><a href="/audit-requests/{{ r.id }}">{{ r.ref }}</a></td><td class="small">{{ r.request|truncate(90) }}<div class="muted">{{ r.requirement.code if r.requirement else '' }} · {{ r.evidence|length }} file(s)</div></td>
+<td class="small">{{ r.owner.name if r.owner else '—' }}</td><td class="mono">{{ r.due_on }}</td>
+<td>{% if r.status in ('Submitted','Closed') %}{{ pill(r.status,'ok') }}{% elif r.due_on < today %}{{ pill('Overdue','bad') }}{% elif (r.due_on - today).days <= 2 %}{{ pill('Due soon','warn') }}{% else %}{{ pill(r.status,'neutral') }}{% endif %}</td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">No audit requests yet. Log each one as it arrives.</div>{% endif %}</div>
+{% if user.role != 'viewer' %}
+<div class="card"><div class="card-head"><h2>Log a request</h2></div>
+<form method="post" class="stack">{{ csrf_field() }}
+<div class="row"><div><label>Reference</label><input type="text" name="ref" value="{{ next_ref }}" required></div><div><label>Requirement</label><select name="requirement_id"><option value="">—</option>{% for q in reqs %}<option value="{{ q.id }}">{{ q.code }}</option>{% endfor %}</select></div></div>
+<label>What they asked for</label><textarea name="request" required></textarea>
+<div class="row"><div><label>Received</label><input type="date" name="received_on" value="{{ today }}" required></div><div><label>Due</label><input type="date" name="due_on" required></div></div>
+<label>Owner</label><select name="owner_id"><option value="">—</option>{% for u in users %}<option value="{{ u.id }}">{{ u.name }}</option>{% endfor %}</select>
+<div class="actions"><button>Log request</button></div></form></div>{% endif %}
+</div>
+{% endblock %}
