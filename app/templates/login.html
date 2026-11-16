@@ -1,0 +1,11 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Sign in{% endblock %}{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+<h1>◆ PrismCIP</h1><p class="sub">Sign in to your compliance workspace.</p>
+<form method="post" class="stack">{{ csrf_field() }}
+  <label>Email</label><input type="email" name="email" required autofocus>
+  <label>Password</label><input type="password" name="password" required>
+  <div class="actions"><button>Sign in</button></div>
+</form></div>
+{% endblock %}

@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Audit package — {{ org.name }}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;color:#1b2330}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:.4rem .6rem;text-align:left;font-size:14px}th{background:#f0f2f5}.ok{color:#1f7a4d}.warn{color:#8a5a00}.bad{color:#a3242b}</style></head><body>
+<h1>NERC CIP low impact audit package</h1>
+<p><b>{{ org.name }}</b>{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}{% if org.regional_entity %} · {{ org.regional_entity }}{% endif %}<br>
+Generated {{ today }} by PrismCIP. Evidence retention window (3 years) starts {{ cutoff }}.<br>
+CIP Senior Manager: {{ org.cip_senior_manager or 'not recorded' }}</p>
+<p>{{ n_assets }} assets · {{ n_paths }} vendor remote access paths · {{ n_sessions }} logged vendor sessions · {{ n_evidence }} evidence items</p>
+<h2>Requirement status</h2>
+<table><tr><th>Requirement</th><th>Last performed</th><th>Due by</th><th>Evidence</th><th>Status</th></tr>
+{% for x in statuses %}<tr><td><b>{{ x.req.code }}</b> {{ x.req.title }}{% if x.gaps %}<ul>{% for g in x.gaps %}<li class="warn">{{ g }}</li>{% endfor %}</ul>{% endif %}</td>
+<td>{{ x.last_performed or '—' }}</td><td>{{ x.due or '—' }}</td><td>{{ x.evidence_count }}</td><td class="{{ x.css }}">{{ x.status }}</td></tr>{% endfor %}</table>
+<h2>Contents</h2>
+<ul><li>01 — Draft CIP-003 low impact plan generated from records</li><li>02 — Assets (CIP-002 R1.3)</li><li>03 — Vendor remote access paths and Section 6 methods</li>
+<li>04 — Vendor session log</li><li>05 — Evidence index with SHA-256 hashes; files under evidence/</li><li>06 — Activity log</li></ul>
+</body></html>

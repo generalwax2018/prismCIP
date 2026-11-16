@@ -1,0 +1,3 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Error{% endblock %}
+{% block content %}<div class="card err-box"><h1>{{ code }}</h1><p>{{ message }}</p><p><a href="/">Back to dashboard</a></p></div>{% endblock %}

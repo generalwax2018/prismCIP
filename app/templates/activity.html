@@ -1,0 +1,7 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Activity{% endblock %}
+{% block content %}
+<h1>Activity log</h1><p class="sub">Append-only record of who changed what. Included in the audit package. Latest 500 shown.</p>
+<table><tr><th>When (UTC)</th><th>Who</th><th>Action</th><th>Detail</th></tr>
+{% for r in rows %}<tr><td class="mono">{{ r.at.strftime('%Y-%m-%d %H:%M:%S') }}</td><td class="small">{{ r.actor }}</td><td class="mono">{{ r.action }}</td><td class="small">{{ r.detail or '' }}</td></tr>{% endfor %}</table>
+{% endblock %}

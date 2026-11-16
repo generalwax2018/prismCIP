@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    environment:
+      PRISMCIP_HTTPS: "1"          # secure cookies; Caddy terminates TLS
+      # PRISMCIP_SECRET_KEY: set in .env to keep sessions across rebuilds
+    env_file: [.env]
+    volumes: [prismcip-data:/data]
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+    depends_on: [app]
+volumes:
+  prismcip-data:
+  caddy-data:

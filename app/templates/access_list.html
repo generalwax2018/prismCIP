@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Vendor remote access{% endblock %}
+{% block content %}
+<h1>Vendor electronic remote access</h1>
+<p class="sub">Every path a vendor can use to reach an asset, and the CIP-003-9 Section 6 methods for each: determine (6.1), disable (6.2), detect malicious communications (6.3).</p>
+{% if rows %}
+<table><tr><th>Vendor</th><th>Asset</th><th>Method</th><th>Status</th><th>6.1</th><th>6.2</th><th>6.3</th><th>Sessions</th></tr>
+{% for p in rows %}<tr><td><a href="/access/{{ p.id }}"><b>{{ p.vendor.name }}</b></a></td><td>{{ p.asset.name }}</td><td>{{ p.access_method }}</td>
+<td>{{ pill(p.status, 'ok' if p.status == 'Disabled' else 'warn') }}</td>
+{% for m in [p.determine_method, p.disable_method, p.detect_method] %}<td>{{ pill('✓','ok') if m else pill('missing','bad') }}</td>{% endfor %}
+<td class="num">{{ p.sessions|length }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card">No vendor access paths yet. Add them from a <a href="/vendors">vendor</a> or <a href="/assets">asset</a> page.</div>{% endif %}
+{% endblock %}

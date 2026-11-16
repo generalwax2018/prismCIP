@@ -1,0 +1,13 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Assets{% endblock %}
+{% block content %}
+<div class="head"><div><h1>Assets containing low impact BES Cyber Systems</h1>
+<p class="sub">Your CIP-002 R1.3 list. For low impact you list the assets (sites), not each cyber system.</p></div>
+{% if user.role != 'viewer' %}<a class="btn" href="/assets/new">Add asset</a>{% endif %}</div>
+{% if rows %}
+<table><tr><th>Asset</th><th>Type</th><th>Routable external</th><th>Dial-up</th><th>Vendor remote access</th><th>Access paths</th></tr>
+{% for a in rows %}<tr><td><a href="/assets/{{ a.id }}"><b>{{ a.name }}</b></a><div class="small muted">{{ a.location or '' }}</div></td>
+<td>{{ a.asset_type }}</td><td>{{ yn(a.routable_external) }}</td><td>{{ yn(a.dialup) }}</td><td>{{ yn(a.vendor_remote_access_allowed) }}</td>
+<td class="num">{{ a.vendor_access|length }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card">No assets yet. <a href="/assets/new">Add your first substation or plant.</a></div>{% endif %}
+{% endblock %}

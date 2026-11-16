@@ -1,0 +1,8 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Plan{% endblock %}
+{% block content %}
+<div class="head noprint"><div><h1>Low impact cyber security plan</h1>
+<p class="sub">Generated from your records. {% if todos %}<b>{{ todos }}</b> item(s) from your records still need a description;{% endif %} narrative sections marked TODO need your process written in.</p></div>
+<div class="actions m0"><button type="button" data-print>Print / save PDF</button></div></div>
+<div class="plan">{% include "_plan_body.html" %}</div>
+{% endblock %}

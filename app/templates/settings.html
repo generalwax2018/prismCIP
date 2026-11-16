@@ -1,0 +1,41 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1><p class="sub">Organization, CIP Senior Manager (R3), delegations (R4) and user accounts.</p>
+<div class="grid g2">
+<div class="card"><h2 class="mt0">Organization</h2>
+<form method="post" action="/settings/org" class="stack">{{ csrf_field() }}
+<label>Name</label><input type="text" name="name" value="{{ org.name }}" required>
+<div class="row"><div><label>NCR ID</label><input type="text" name="ncr_id" value="{{ org.ncr_id or '' }}"></div>
+<div><label>Regional Entity</label><input type="text" name="regional_entity" value="{{ org.regional_entity or '' }}"></div></div>
+<label>Registered functions</label><input type="text" name="registered_functions" value="{{ org.registered_functions or '' }}">
+<div class="row"><div><label>CIP Senior Manager <span class="hint">R3</span></label><input type="text" name="cip_senior_manager" value="{{ org.cip_senior_manager or '' }}"></div>
+<div><label>In role since</label><input type="date" name="cip_senior_manager_since" value="{{ org.cip_senior_manager_since or '' }}"></div></div>
+<p class="small muted">Changes to the CIP Senior Manager must be documented within 30 calendar days. Every change here is recorded in the activity log.</p>
+{% if user.role == 'admin' %}<div class="actions"><button>Save</button></div>{% endif %}</form></div>
+
+<div class="card"><h2 class="mt0">Delegations of authority <span class="small muted">R4</span></h2>
+{% for dl in delegations %}<div class="mb"><b>{{ dl.delegate_name }}</b>{% if dl.delegate_title %}, {{ dl.delegate_title }}{% endif %}
+{{ pill('Revoked ' ~ dl.revoked_on, 'neutral') if dl.revoked_on else pill('Active since ' ~ dl.effective_on, 'ok') }}
+<div class="small">{{ dl.authority }}</div>
+{% if not dl.revoked_on and user.role == 'admin' %}<form method="post" action="/settings/delegations/{{ dl.id }}/revoke" class="inline" data-confirm="Revoke this delegation?">{{ csrf_field() }}<button class="link red">Revoke</button></form>{% endif %}</div>
+{% else %}<p class="muted">No delegations.</p>{% endfor %}
+{% if user.role == 'admin' %}<form method="post" action="/settings/delegations" class="stack">{{ csrf_field() }}
+<div class="row"><div><label>Delegate name</label><input type="text" name="delegate_name" required></div><div><label>Title</label><input type="text" name="delegate_title"></div></div>
+<label>Authority delegated</label><input type="text" name="authority" required placeholder="e.g. Approve CIP-002 R2 asset list reviews">
+<label>Effective</label><input type="date" name="effective_on" required>
+<div class="actions"><button class="secondary">Add delegation</button></div></form>{% endif %}
+</div>
+
+<div class="card"><h2 class="mt0">Users</h2>
+<table><tr><th>User</th><th>Role</th><th></th></tr>
+{% for u in users %}<tr><td>{{ u.name }}<div class="small muted">{{ u.email }}</div></td><td>{{ u.role }}</td>
+<td>{% if u.id != user.id and user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/toggle" class="inline">{{ csrf_field() }}<button class="secondary">{{ 'Disable' if u.active else 'Enable' }}</button></form>{% elif not u.active %}disabled{% endif %}</td></tr>{% endfor %}</table>
+{% if user.role == 'admin' %}<form method="post" action="/settings/users" class="stack">{{ csrf_field() }}
+<div class="row"><div><label>Name</label><input type="text" name="name"></div><div><label>Email</label><input type="email" name="email" required></div></div>
+<div class="row"><div><label>Role</label><select name="role">{% for r in roles %}<option {{ 'selected' if r == 'editor' }}>{{ r }}</option>{% endfor %}</select></div>
+<div><label>Temporary password</label><input type="password" name="password" minlength="12" required></div></div>
+<div class="actions"><button class="secondary">Add user</button></div></form>{% endif %}
+</div>
+</div>
+{% endblock %}

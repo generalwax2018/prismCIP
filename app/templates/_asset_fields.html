@@ -1,0 +1,13 @@
+<label>Name</label><input type="text" name="name" value="{{ a.name if a else '' }}" required>
+<div class="row">
+  <div><label>Type</label><select name="asset_type">{% for t in types %}<option {{ 'selected' if a and a.asset_type == t }}>{{ t }}</option>{% endfor %}</select></div>
+  <div><label>Location</label><input type="text" name="location" value="{{ a.location or '' if a else '' }}"></div>
+</div>
+<label class="check"><input type="checkbox" name="routable_external" {{ 'checked' if a and a.routable_external }}> Routable protocol communication crosses the asset boundary to/from low impact BCS</label>
+<label class="check"><input type="checkbox" name="dialup" {{ 'checked' if a and a.dialup }}> Has Dial-up Connectivity to low impact BCS</label>
+<label class="check"><input type="checkbox" name="vendor_remote_access_allowed" {{ 'checked' if a and a.vendor_remote_access_allowed }}> Allows vendor electronic remote access (triggers Section 6)</label>
+<label>Physical security controls <span class="hint">Section 2 — locks, fencing, card access, who has keys</span></label>
+<textarea name="physical_access_control">{{ a.physical_access_control or '' if a else '' }}</textarea>
+<label>Electronic access controls <span class="hint">Section 3.1 — firewall/ACL, what's permitted and why</span></label>
+<textarea name="electronic_access_control">{{ a.electronic_access_control or '' if a else '' }}</textarea>
+<label>Notes</label><textarea name="notes">{{ a.notes or '' if a else '' }}</textarea>

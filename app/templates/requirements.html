@@ -1,0 +1,12 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Requirements{% endblock %}
+{% block content %}
+<h1>Requirements</h1><p class="sub">Low impact obligations under CIP-002 and CIP-003-9. Click one to attach evidence.</p>
+<table><tr><th>Requirement</th><th>Cadence</th><th>Last done</th><th>Due by</th><th>Evidence</th><th>Status</th></tr>
+{% for x in statuses %}<tr>
+<td><a href="/requirements/{{ x.req.id }}"><b>{{ x.req.code }}</b></a> <span class="small">{{ x.req.title }}</span>
+{% if x.gaps %}<ul class="gaps">{% for g in x.gaps[:3] %}<li>{{ g }}</li>{% endfor %}{% if x.gaps|length > 3 %}<li>…{{ x.gaps|length - 3 }} more</li>{% endif %}</ul>{% endif %}</td>
+<td class="small">{{ ('every %d mo'|format(x.req.cadence_months)) if x.req.cadence_months else 'ongoing' }}</td>
+<td class="mono">{{ x.last_performed or '—' }}</td><td class="mono">{{ x.due or '—' }}</td><td class="num">{{ x.evidence_count }}</td>
+<td>{{ pill(x.status, x.css) }}</td></tr>{% endfor %}</table>
+{% endblock %}

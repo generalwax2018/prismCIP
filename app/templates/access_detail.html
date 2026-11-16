@@ -1,0 +1,53 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}{{ p.vendor.name }} → {{ p.asset.name }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/access">← Remote access</a></p>
+<div class="head"><div><h1>{{ p.vendor.name }} → {{ p.asset.name }}</h1>
+<p class="sub">{{ p.access_method }} · {{ pill(p.status, 'ok' if p.status == 'Disabled' else 'warn') }} · Section 6 {{ pill('complete','ok') if p.section6_complete else pill('incomplete','bad') }}</p></div>
+{% if user.role != 'viewer' %}
+<form method="post" action="/access/{{ p.id }}/toggle" data-confirm="{{ 'Disable this vendor access path? Open sessions will be closed.' if p.status == 'Enabled' else 'Re-enable this vendor access path?' }}">{{ csrf_field() }}
+<button class="{{ 'danger' if p.status == 'Enabled' else '' }}">{{ 'Disable access now' if p.status == 'Enabled' else 'Re-enable access' }}</button></form>{% endif %}
+</div>
+<div class="grid g2">
+<div class="card s6"><h2 class="mt0">Section 6 methods</h2>
+<form method="post" class="stack">{{ csrf_field() }}
+<label>Access method</label><select name="access_method">{% for m in methods %}<option {{ 'selected' if p.access_method == m }}>{{ m }}</option>{% endfor %}</select>
+<label>6.1 How you determine vendor remote access is happening</label>
+<textarea name="determine_method" placeholder="e.g. Vendor requests access by ticket; jump host logs every session; daily review of VPN connection report">{{ p.determine_method or '' }}</textarea>
+<label>6.2 How you disable it</label>
+<textarea name="disable_method" placeholder="e.g. VPN account stays disabled until approved; operator can kill the session from the jump host or pull the cellular modem power">{{ p.disable_method or '' }}</textarea>
+<label>6.3 How you detect known or suspected malicious communications (in and out)</label>
+<textarea name="detect_method" placeholder="e.g. Firewall IPS signatures on the vendor VPN zone; alerts go to the SOC; outbound traffic limited to listed IPs">{{ p.detect_method or '' }}</textarea>
+<div class="row"><div><label>Approved by</label><input type="text" name="approved_by" value="{{ p.approved_by or '' }}"></div>
+<div><label>Approved on</label><input type="date" name="approved_on" value="{{ p.approved_on or '' }}"></div></div>
+{% if user.role != 'viewer' %}<div class="actions"><button>Save</button></div>{% endif %}
+</form>
+{% if user.role != 'viewer' %}<form method="post" action="/access/{{ p.id }}/delete" class="actions" data-confirm="Delete this access path and its session history? Prefer disabling to keep the record.">{{ csrf_field() }}<button class="secondary">Delete path</button></form>{% endif %}
+</div>
+<div>
+<h2 class="mt0">Vendor sessions</h2>
+{% if user.role != 'viewer' and p.status == 'Enabled' %}
+<div class="card"><h3 class="mt0">Log a session</h3>
+<form method="post" action="/access/{{ p.id }}/sessions" class="stack">{{ csrf_field() }}
+<div class="row"><div><label>Vendor person</label><input type="text" name="vendor_person" required></div>
+<div><label>Started (UTC)</label><input type="datetime-local" name="started_at" value="{{ now }}"></div></div>
+<label>Purpose</label><input type="text" name="purpose" required placeholder="e.g. Relay firmware update, ticket #1234">
+<label>Approved by</label><input type="text" name="approved_by" placeholder="{{ user.email }}">
+<div class="actions"><button>Start session</button></div></form></div>{% endif %}
+{% for x in p.sessions %}
+<div class="card">
+<div class="head"><div><b>{{ x.vendor_person }}</b> — {{ x.purpose }}
+<div class="small muted mono">{{ x.started_at.strftime('%Y-%m-%d %H:%M') }} → {{ x.ended_at.strftime('%Y-%m-%d %H:%M') if x.ended_at else 'open' }} UTC · approved by {{ x.approved_by or '—' }}</div></div>
+<div>{% if not x.ended_at %}{{ pill('Open','warn') }}{% elif x.malicious_activity_noted %}{{ pill('Malicious activity','bad') }}{% else %}{{ pill(x.end_reason,'ok') }}{% endif %}</div></div>
+{% if x.notes %}<p class="small pre">{{ x.notes }}</p>{% endif %}
+{% if not x.ended_at and user.role != 'viewer' %}
+<form method="post" action="/sessions/{{ x.id }}/end" class="stack">{{ csrf_field() }}
+<div class="row"><div><label>End reason</label><select name="end_reason">{% for r in end_reasons %}<option>{{ r }}</option>{% endfor %}</select></div>
+<div><label>Ended (UTC)</label><input type="datetime-local" name="ended_at" value="{{ now }}"></div></div>
+<label class="check"><input type="checkbox" name="malicious_activity_noted"> Known or suspected malicious communication observed</label>
+<label>Notes</label><input type="text" name="notes">
+<div class="actions"><button class="secondary">End session</button></div></form>{% endif %}
+</div>
+{% else %}<div class="card muted">No sessions logged.</div>{% endfor %}
+</div></div>
+{% endblock %}

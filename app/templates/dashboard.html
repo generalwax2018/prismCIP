@@ -1,0 +1,52 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Compliance dashboard</h1>
+<p class="sub">CIP-002 and CIP-003-9 low impact obligations for {{ user.org.name }}.</p>
+<div class="grid g4">
+  <div class="stat ok"><div class="n">{{ counts.ok }}</div><div class="l">Requirements in good shape</div></div>
+  <div class="stat warn"><div class="n">{{ counts.warn }}</div><div class="l">Due soon or with gaps</div></div>
+  <div class="stat bad"><div class="n">{{ counts.bad }}</div><div class="l">Overdue or no evidence</div></div>
+  <div class="stat"><div class="n">{{ n_assets }} / {{ n_paths }}</div><div class="l">Assets / enabled vendor access paths</div></div>
+</div>
+
+<div class="grid g2">
+<div>
+<h2>Section 6 — Vendor electronic remote access</h2>
+<div class="card s6">
+  {% for x in s6 %}
+  <div class="mb"><a href="/requirements/{{ x.req.id }}"><b>{{ x.req.code }}</b></a> {{ pill(x.status, x.css) }}
+    <div class="small muted">{{ x.req.title.split('— ')[1] }}</div>
+    {% if x.gaps %}<ul class="gaps">{% for g in x.gaps[:4] %}<li>{{ g }}</li>{% endfor %}{% if x.gaps|length > 4 %}<li>…and {{ x.gaps|length - 4 }} more</li>{% endif %}</ul>{% endif %}
+  </div>
+  {% endfor %}
+  <a class="btn secondary" href="/access">Manage vendor access</a>
+</div>
+
+<h2>Open vendor sessions</h2>
+{% if open_sessions %}
+<table><tr><th>Vendor</th><th>Asset</th><th>Person</th><th>Started (UTC)</th></tr>
+{% for x in open_sessions %}<tr><td><a href="/access/{{ x.access.id }}">{{ x.access.vendor.name }}</a></td><td>{{ x.access.asset.name }}</td><td>{{ x.vendor_person }}</td><td class="mono">{{ x.started_at.strftime('%Y-%m-%d %H:%M') }}</td></tr>{% endfor %}
+</table>
+{% else %}<div class="card muted">No vendor sessions are open right now.</div>{% endif %}
+</div>
+
+<div>
+<h2>Periodic deadlines</h2>
+<table><tr><th>Requirement</th><th>Last done</th><th>Due by</th><th></th></tr>
+{% for x in upcoming %}<tr><td><a href="/requirements/{{ x.req.id }}">{{ x.req.code }}</a><div class="small muted">{{ x.req.title }}</div></td>
+<td class="mono">{{ x.last_performed }}</td><td class="mono">{{ x.due }}</td><td>{{ pill(x.status, x.css) }}</td></tr>{% endfor %}
+{% set never = statuses|selectattr('req.cadence_months')|selectattr('last_performed', 'none')|list %}
+{% for x in never %}<tr><td><a href="/requirements/{{ x.req.id }}">{{ x.req.code }}</a><div class="small muted">{{ x.req.title }}</div></td><td class="muted">never</td><td class="muted">every {{ x.req.cadence_months }} mo</td><td>{{ pill(x.status, x.css) }}</td></tr>{% endfor %}
+</table>
+
+<h2>Everything else needing attention</h2>
+<div class="card">
+{% set attention = statuses|rejectattr('req.section6')|rejectattr('req.cadence_months')|rejectattr('css', 'equalto', 'ok')|list %}
+{% for x in attention %}<div class="mb"><a href="/requirements/{{ x.req.id }}"><b>{{ x.req.code }}</b></a> {{ pill(x.status, x.css) }} <span class="small muted">{{ x.req.title }}</span>
+{% if x.gaps %}<ul class="gaps">{% for g in x.gaps[:3] %}<li>{{ g }}</li>{% endfor %}</ul>{% endif %}</div>
+{% else %}<span class="muted">Nothing else outstanding.</span>{% endfor %}
+</div>
+</div>
+</div>
+{% endblock %}

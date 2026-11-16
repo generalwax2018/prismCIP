@@ -1,0 +1,25 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}{{ v.name }}{% endblock %}
+{% block content %}
+<p class="small"><a href="/vendors">← Vendors</a></p><h1>{{ v.name }}</h1><p class="sub">{{ v.contact or '' }}</p>
+<div class="grid g2">
+<div class="card"><form method="post" class="stack">{{ csrf_field() }}
+<label>Name</label><input type="text" name="name" value="{{ v.name }}" required>
+<label>Contact</label><input type="text" name="contact" value="{{ v.contact or '' }}">
+<label>Services</label><textarea name="services">{{ v.services or '' }}</textarea>
+{% if user.role != 'viewer' %}<div class="actions"><button>Save</button></div>{% endif %}</form>
+{% if user.role != 'viewer' %}<form method="post" action="/vendors/{{ v.id }}/delete" class="actions" data-confirm="Delete {{ v.name }} and all its access paths and session history?">{{ csrf_field() }}<button class="danger">Delete vendor</button></form>{% endif %}
+</div>
+<div><h2 class="mt0">Access paths</h2>
+{% if v.access %}<table><tr><th>Asset</th><th>Method</th><th>Status</th><th>Sec. 6</th></tr>
+{% for p in v.access %}<tr><td><a href="/access/{{ p.id }}">{{ p.asset.name }}</a></td><td>{{ p.access_method }}</td>
+<td>{{ pill(p.status, 'ok' if p.status == 'Disabled' else 'warn') }}</td><td>{{ pill('Complete','ok') if p.section6_complete else pill('Incomplete','bad') }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">No access paths yet.</div>{% endif %}
+{% if user.role != 'viewer' %}<div class="card mt1"><h3 class="mt0">Add access path</h3>
+{% if assets %}<form method="post" action="/access" class="stack">{{ csrf_field() }}<input type="hidden" name="vendor_id" value="{{ v.id }}">
+<div class="row"><div><label>Asset</label><select name="asset_id">{% for a in assets %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
+<div><label>Method</label><select name="access_method">{% for m in methods %}<option>{{ m }}</option>{% endfor %}</select></div></div>
+<div class="actions"><button>Add</button></div></form>
+{% else %}<p class="muted">Add an asset first.</p>{% endif %}</div>{% endif %}
+</div></div>
+{% endblock %}

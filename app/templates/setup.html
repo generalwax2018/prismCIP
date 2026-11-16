@@ -1,0 +1,20 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Set up{% endblock %}{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="card">
+<h1>◆ Set up PrismCIP</h1>
+<p class="sub">Create your utility and the first admin account.</p>
+<form method="post" class="stack">{{ csrf_field() }}
+  <label>Utility / registered entity name</label><input type="text" name="org_name" required>
+  <div class="row">
+    <div><label>NCR ID <span class="hint">optional</span></label><input type="text" name="ncr_id"></div>
+    <div><label>Regional Entity</label>
+      <select name="regional_entity"><option></option>{% for r in ["MRO","NPCC","RF","SERC","Texas RE","WECC"] %}<option>{{ r }}</option>{% endfor %}</select></div>
+  </div>
+  <label>Registered functions <span class="hint">e.g. DP, GO, GOP, TO</span></label><input type="text" name="registered_functions">
+  <label>Your name</label><input type="text" name="name" required>
+  <label>Email</label><input type="email" name="email" required>
+  <label>Password <span class="hint">12+ characters</span></label><input type="password" name="password" minlength="12" required>
+  <div class="actions"><button>Create</button></div>
+</form></div>
+{% endblock %}

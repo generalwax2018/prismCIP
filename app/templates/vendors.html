@@ -1,0 +1,18 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% block title %}Vendors{% endblock %}
+{% block content %}
+<h1>Vendors</h1><p class="sub">Companies that can reach your assets remotely — integrators, OEMs, relay and SCADA support.</p>
+<div class="grid g2">
+<div>{% if rows %}<table><tr><th>Vendor</th><th>Access paths</th><th>Enabled</th></tr>
+{% for v in rows %}<tr><td><a href="/vendors/{{ v.id }}"><b>{{ v.name }}</b></a><div class="small muted">{{ v.services or '' }}</div></td>
+<td class="num">{{ v.access|length }}</td><td class="num">{{ v.access|selectattr('status','equalto','Enabled')|list|length }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">No vendors yet.</div>{% endif %}</div>
+{% if user.role != 'viewer' %}
+<div class="card"><h3 class="mt0">Add vendor</h3>
+<form method="post" class="stack">{{ csrf_field() }}
+<label>Name</label><input type="text" name="name" required>
+<label>Contact</label><input type="text" name="contact">
+<label>Services</label><textarea name="services" placeholder="e.g. RTU and relay support at North Sub"></textarea>
+<div class="actions"><button>Add vendor</button></div></form></div>{% endif %}
+</div>
+{% endblock %}

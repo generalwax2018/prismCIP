@@ -1,0 +1,54 @@
+{% macro t(v) %}{% if v %}{{ v }}{% else %}<span class="todo">{{ TODO }}</span>{% endif %}{% endmacro %}
+<h1>Cyber Security Plan for Assets Containing Low Impact BES Cyber Systems</h1>
+<p><b>{{ org.name }}</b>{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}{% if org.regional_entity %} · {{ org.regional_entity }}{% endif %}<br>
+Prepared under CIP-003-9 Requirement R2 and Attachment 1 · Draft generated {{ today }}</p>
+
+<h2>1. Purpose and scope</h2>
+<p>This plan documents how {{ org.name }} implements the Attachment 1 controls for each asset identified under CIP-002 as containing low impact BES Cyber Systems. It applies to the following {{ assets|length }} asset(s):</p>
+{% if assets %}<ul>{% for a in assets %}<li>{{ a.name }} — {{ a.asset_type }}{% if a.location %}, {{ a.location }}{% endif %}</li>{% endfor %}</ul>
+{% else %}<p><span class="todo">No assets recorded</span></p>{% endif %}
+
+<h2>2. Roles</h2>
+<p>CIP Senior Manager: {{ t(org.cip_senior_manager) }}{% if org.cip_senior_manager_since %} (since {{ org.cip_senior_manager_since }}){% endif %}.</p>
+{% if delegations %}<p>Active delegations of authority:</p><ul>{% for dl in delegations %}<li>{{ dl.delegate_name }}{% if dl.delegate_title %}, {{ dl.delegate_title }}{% endif %} — {{ dl.authority }} (effective {{ dl.effective_on }})</li>{% endfor %}</ul>{% endif %}
+
+<h2>3. Section 1 — Cyber security awareness</h2>
+<p>At least once every 15 calendar months, {{ org.name }} reinforces cyber security practices with personnel who have access to these assets, using: <span class="todo">describe method — e.g. annual email bulletin, toolbox talk, posters</span>.</p>
+
+<h2>4. Section 2 — Physical security controls</h2>
+<p>Physical access is controlled based on need to each asset (or the locations of its low impact BCS) and to any Cyber Assets that provide Section 3.1 electronic access controls.</p>
+<table><tr><th>Asset</th><th>Controls</th></tr>{% for a, v in physical %}<tr><td>{{ a.name }}</td><td>{{ t(v) }}</td></tr>{% endfor %}</table>
+
+<h2>5. Section 3 — Electronic access controls</h2>
+<p>Where routable protocol communication crosses the asset boundary, only necessary inbound and outbound access is permitted and all other access is denied.</p>
+<table><tr><th>Asset</th><th>Controls</th></tr>{% for a, v in electronic %}<tr><td>{{ a.name }}</td><td>{{ t(v) }}</td></tr>{% endfor %}</table>
+{% if dialup %}<p>Dial-up Connectivity exists at: {{ dialup|map(attribute='name')|join(', ') }}. It is authenticated by: <span class="todo">describe authentication method</span>.</p>
+{% else %}<p>No Dial-up Connectivity to low impact BCS is recorded.</p>{% endif %}
+
+<h2>6. Section 4 — Cyber security incident response</h2>
+<p>{{ org.name }} maintains incident response plan(s) covering identification, classification and response; determination of whether an incident is a Reportable Cyber Security Incident and notification to the E-ISAC; roles and responsibilities; and incident handling. The plan is tested at least once every 36 calendar months and updated, if needed, within 180 calendar days of a test or an actual Reportable Cyber Security Incident.</p>
+<p>Plan document reference: <span class="todo">name and location of the incident response plan</span></p>
+
+<h2>7. Section 5 — Transient Cyber Assets and Removable Media</h2>
+<p>Entity-managed TCAs: <span class="todo">method(s), e.g. antivirus, application allowlisting, restricted use</span><br>
+Third-party-managed TCAs: <span class="todo">review of vendor's mitigation or entity scan before connection</span><br>
+Removable Media: <span class="todo">method to detect malicious code before use, e.g. kiosk scan</span></p>
+
+<h2>8. Section 6 — Vendor electronic remote access security controls</h2>
+{% if s6 %}
+<p>For assets that allow vendor electronic remote access, {{ org.name }} uses the following methods to determine (6.1) and disable (6.2) that access, and to detect known or suspected malicious inbound and outbound communications (6.3).</p>
+{% for x in s6 %}
+<h3>{{ x.p.vendor.name }} → {{ x.p.asset.name }} ({{ x.p.access_method }}){% if x.p.status == 'Disabled' %} — currently disabled{% endif %}</h3>
+<table><tr><th class="w28">6.1 Determine</th><td>{{ t(x.determine) }}</td></tr>
+<tr><th>6.2 Disable</th><td>{{ t(x.disable) }}</td></tr>
+<tr><th>6.3 Detect malicious communications</th><td>{{ t(x.detect) }}</td></tr></table>
+{% endfor %}
+{% elif any_vendor_access %}<p><span class="todo">Assets are marked as allowing vendor remote access, but no access paths are recorded</span></p>
+{% else %}<p>No asset allows vendor electronic remote access. If that changes, this section must be completed before access is enabled.</p>{% endif %}
+
+<h2>9. CIP Exceptional Circumstances</h2>
+<p><span class="todo">describe how CIP Exceptional Circumstances are declared and responded to</span></p>
+
+<h2>Approval</h2>
+<p>Reviewed and approved by the CIP Senior Manager or delegate. Policies and this plan are reviewed at least once every 15 calendar months.</p>
+<div class="sign"><div>Signature</div><div>Date</div><div>Name: {{ org.cip_senior_manager or '' }}</div><div>Title</div></div>
