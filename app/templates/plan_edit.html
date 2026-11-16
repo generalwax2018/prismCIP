@@ -1,0 +1,14 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Edit plan{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/plan">← Plan</a></p>
+<header class="head"><div><h1>Edit plan sections</h1>
+<p class="sub">Write how your utility does each of these in plain language. Everything else in the plan (assets, physical and electronic controls, vendor access methods, roles) comes from your records. When it reads right, request a CIP Senior Manager sign-off on the plan.</p></div></header>
+<form method="post" class="stack">{{ csrf_field() }}
+{% for key, title, hint in sections %}
+<div class="card"><div class="card-head"><h2>{{ title }}</h2>{% if have[key] and have[key].body %}<span class="small muted">saved {{ have[key].updated_at.strftime('%Y-%m-%d') }} by {{ have[key].updated_by }}</span>{% else %}{{ pill('TODO', 'warn') }}{% endif %}</div>
+<textarea name="{{ key }}" rows="4" placeholder="{{ hint }}">{{ have[key].body if have[key] else '' }}</textarea></div>
+{% endfor %}
+<div class="actions"><button>Save plan sections</button><a class="btn secondary" href="/plan">Cancel</a></div>
+</form>
+{% endblock %}

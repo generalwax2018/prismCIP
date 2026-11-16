@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>RSAW workbook — {{ org.name }}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:980px;margin:2rem auto;color:#1b2330;line-height:1.45}h1{margin-bottom:.2rem}h2{margin-top:2.2rem;border-bottom:2px solid #13243a;padding-bottom:.3rem}h3{margin:1.6rem 0 .3rem}
+table{border-collapse:collapse;width:100%;margin:.4rem 0}th,td{border:1px solid #cfd5dd;padding:.35rem .5rem;text-align:left;font-size:13px;vertical-align:top}th{background:#eef1f5}
+.box{border:1px solid #cfd5dd;border-radius:6px;padding:.6rem .8rem;white-space:pre-wrap;background:#fafbfc}.muted{color:#5d6878}.ok{color:#1f7a4d}.warn{color:#8a5a00}.bad{color:#a3242b}.k{color:#5d6878;font-size:13px}</style></head><body>
+<h1>Reliability Standard Audit Worksheet responses</h1>
+<p><b>{{ org.name }}</b>{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}{% if org.regional_entity %} · {{ org.regional_entity }}{% endif %}<br>
+{% if org.audit_id %}Audit ID: {{ org.audit_id }}<br>{% endif %}
+{% if org.audit_period_start or org.audit_period_end %}Audit period: {{ org.audit_period_start or '…' }} to {{ org.audit_period_end or '…' }}<br>{% endif %}
+CIP Senior Manager: {{ org.cip_senior_manager or 'not recorded' }} · Prepared {{ today }} with PrismCIP</p>
+<p class="muted">Responses and evidence indexes for CIP-002 and CIP-003-9 (low impact). Copy them into your Regional Entity's current RSAW form. File links point to the evidence folder of the PrismCIP audit package.</p>
+{% for sec in sections %}
+<h2>{{ sec.standard }} — {{ sec.heading }}</h2>
+{% for it in sec.reqs %}
+<h3>{{ it.code }} — {{ it.st.req.title }} <span class="{{ it.st.css }}">[{{ it.st.status }}]</span></h3>
+<p class="k"><b>Requirement:</b> {{ it.st.req.summary }}<br><b>Auditor looks for:</b> {{ it.focus }}</p>
+<p><b>Registered entity response</b></p>
+<div class="box">{{ it.narrative.body if it.narrative and it.narrative.body else '(no response written yet)' }}</div>
+<p><b>Registered entity evidence</b></p>
+{% if it.evidence or it.generated %}<table><tr><th>File name</th><th>Document title</th><th>Revision or version</th><th>Document date</th><th>Relevant page(s) or section(s)</th><th>Description of applicability of document</th></tr>
+{% for e in it.evidence %}{% set zp = zip_path(e) %}<tr><td>{% if zp %}<a href="{{ zp }}">{{ e.file_name }}</a>{% else %}record only{% endif %}</td><td>{{ e.title }}</td><td>{{ 'sha256 ' ~ e.sha256[:12] if e.sha256 else '—' }}</td><td>{{ e.performed_on }}</td><td>{{ e.asset.name if e.asset else 'All assets' }}</td><td>{{ e.description or '' }}</td></tr>{% endfor %}
+{% for g in it.generated %}<tr><td><a href="{{ g[0] }}">{{ g[0] }}</a></td><td>{{ g[1] }}</td><td>generated {{ today }}</td><td>{{ today }}</td><td>All assets</td><td>{{ g[2] }}</td></tr>{% endfor %}</table>
+{% else %}<p class="bad">No evidence in the audit period.</p>{% endif %}
+{% endfor %}{% endfor %}
+</body></html>

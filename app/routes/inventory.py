@@ -177,6 +177,7 @@ async def access_update(pid: int, request: Request, user: User = Depends(editor)
     p.determine_method, p.disable_method, p.detect_method = (s(f, "determine_method"), s(f, "disable_method"),
                                                              s(f, "detect_method"))
     p.approved_by, p.approved_on = s(f, "approved_by"), d(f, "approved_on")
+    p.accounts = s(f, "accounts")
     audit(db, user, "vendor_access_updated", f"{p.vendor.name} → {p.asset.name}")
     db.commit()
     return redirect(f"/access/{pid}", "Saved.", request)

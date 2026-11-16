@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Two-step sign-in{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/settings">← Settings</a></p>
+<header class="head"><div><h1>Two-step sign-in</h1><p class="sub">A 6-digit code from an authenticator app (Microsoft Authenticator, Google Authenticator, 1Password, …) is needed after your password.</p></div></header>
+{% if enrolled %}
+<div class="card"><div class="card-head"><h2>On</h2>{{ pill('Active', 'ok') }}</div>
+<form method="post" class="stack">{{ csrf_field() }}<input type="hidden" name="action" value="disable">
+<p class="small">To turn it off, confirm your password and a current code.</p>
+<div class="row"><div><label>Password</label><input type="password" name="password" required></div><div><label>Code</label><input type="text" name="code" inputmode="numeric" required></div></div>
+<div class="actions"><button class="danger">Turn off</button></div></form></div>
+{% else %}
+<div class="grid g2">
+<div class="card"><div class="card-head"><h2>1. Scan</h2></div>
+<div class="qr-wrap">{{ qr|safe }}</div>
+<p class="small muted">Can't scan? Enter this key: <span class="mono wrap-any">{{ secret }}</span></p></div>
+<div class="card"><div class="card-head"><h2>2. Confirm</h2></div>
+<form method="post" class="stack">{{ csrf_field() }}<input type="hidden" name="action" value="enable">
+<label>Code from the app</label><input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" required>
+<div class="actions"><button>Turn on</button></div></form></div>
+</div>
+{% endif %}
+{% endblock %}

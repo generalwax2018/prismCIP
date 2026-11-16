@@ -38,6 +38,13 @@ def _safe(name: str) -> str:
     return "".join(c if c.isalnum() or c in "-_. " else "_" for c in name).strip() or "file"
 
 
+def evidence_zip_path(e) -> str:
+    """Where an evidence file sits inside the audit package. The RSAW workbook links to the same paths."""
+    if not e.stored_name:
+        return ""
+    return f"evidence/{_safe(e.requirement.code)}/{e.id}_{_safe(e.file_name or 'file')}"
+
+
 @router.get("/export")
 def export(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
     org = user.org
@@ -80,7 +87,7 @@ def export(request: Request, user: User = Depends(current_user), db: Session = D
         for e in evidence:
             path_in_zip = ""
             if e.stored_name and evidence_path(e).exists():
-                path_in_zip = f"evidence/{_safe(e.requirement.code)}/{e.id}_{_safe(e.file_name or 'file')}"
+                path_in_zip = evidence_zip_path(e)
                 z.write(evidence_path(e), path_in_zip)
             idx.append([e.requirement.code, e.title, e.performed_on, e.asset.name if e.asset else "",
                         e.uploaded_by, e.uploaded_at, e.sha256 or "", path_in_zip,
@@ -88,6 +95,27 @@ def export(request: Request, user: User = Depends(current_user), db: Session = D
         z.writestr("05_evidence_index.csv", _csv(
             idx, ["requirement", "title", "performed_on", "asset", "uploaded_by", "uploaded_utc", "sha256",
                   "file_in_package", "within_3yr_retention"]))
+        from .rsaw import render_export
+        z.writestr("07_rsaw_workbook.html", render_export(db, org))
+        from ..models import Finding, Signoff
+        from .signoffs import doc_path
+        so_rows = []
+        for so in db.query(Signoff).filter_by(org_id=org.id).order_by(Signoff.id).all():
+            p = ""
+            if so.stored_name and doc_path(so).exists():
+                p = f"signoffs/{so.id}_{_safe(so.file_name or 'document')}"
+                z.write(doc_path(so), p)
+            so_rows.append([so.id, so.title, so.requirement.code if so.requirement else so.kind, so.status,
+                            so.requested_by, so.requested_at, so.signer.name, so.signature_name or "",
+                            so.decided_at or "", so.sha256, p])
+        z.writestr("08_signoffs.csv", _csv(so_rows, ["id", "document", "requirement", "status", "requested_by",
+                                                     "requested_utc", "signer", "signed_as", "decided_utc",
+                                                     "document_sha256", "file_in_package"]))
+        z.writestr("09_findings.csv", _csv(
+            [[x.id, x.severity, x.status, x.requirement_code or "", x.title, x.detail or "", x.created_at,
+              x.resolved_by or "", x.resolution or ""]
+             for x in db.query(Finding).filter_by(org_id=org.id).order_by(Finding.id).all()],
+            ["id", "severity", "status", "requirement", "title", "detail", "found_utc", "resolved_by", "resolution"]))
         z.writestr("06_activity_log.csv", _csv(
             [[r.at, r.actor, r.action, r.detail or ""] for r in logs], ["at_utc", "actor", "action", "detail"]))
 

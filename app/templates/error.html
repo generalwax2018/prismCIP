@@ -1,3 +1,4 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
 {% block title %}Error{% endblock %}
-{% block content %}<div class="card err-box"><h1>{{ code }}</h1><p>{{ message }}</p><p><a href="/">Back to dashboard</a></p></div>{% endblock %}
+{% block content %}<div class="card err-box"><h1>{{ code }}</h1><p class="sub">{{ message }}</p><p><a class="btn secondary" href="/">Back to dashboard</a></p></div>{% endblock %}
+{% block bare %}<div class="login-card err-box"><h1>{{ code }}</h1><p class="sub">{{ message }}</p><p><a class="btn" href="/login">Sign in</a></p></div>{% endblock %}

@@ -32,9 +32,47 @@ class Base(DeclarativeBase):
     pass
 
 
+def server_key() -> str:
+    """Session-signing and at-rest encryption key: PRISMCIP_SECRET_KEY, or one generated into the data folder."""
+    import secrets
+    key = os.environ.get("PRISMCIP_SECRET_KEY")
+    if key:
+        return key
+    f = DATA_DIR / ".secret_key"
+    if not f.exists():
+        f.write_text(secrets.token_urlsafe(48))
+        try:
+            f.chmod(0o600)
+        except OSError:
+            pass
+    return f.read_text().strip()
+
+
 def get_db():
     db = SessionLocal()
     try:
         yield db
     finally:
         db.close()
+
+
+def auto_migrate():
+    """Add columns that newer versions of the models define to an existing database. Never drops anything.
+    New tables are created by create_all; this covers new columns on tables that already exist."""
+    from sqlalchemy import inspect, text
+    insp = inspect(engine)
+    existing = set(insp.get_table_names())
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if table.name not in existing:
+                continue
+            have = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in have:
+                    continue
+                ddl_type = col.type.compile(dialect=engine.dialect)
+                default = ""
+                if col.default is not None and getattr(col.default, "is_scalar", False):
+                    v = col.default.arg
+                    default = f" DEFAULT {int(v) if isinstance(v, bool) else repr(v) if isinstance(v, str) else v}"
+                conn.execute(text(f'ALTER TABLE "{table.name}" ADD COLUMN "{col.name}" {ddl_type}{default}'))

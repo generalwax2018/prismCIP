@@ -1,0 +1,8 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>CIP-002 R2 asset list — {{ org.name }}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;color:#1b2330}table{border-collapse:collapse;width:100%}th,td{border:1px solid #ddd;padding:.4rem .6rem;text-align:left;font-size:14px;vertical-align:top}th{background:#f0f2f5}</style></head><body>
+<h1>Assets containing low impact BES Cyber Systems</h1>
+<p><b>{{ org.name }}</b>{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}<br>CIP-002 R1.3 identification, submitted for CIP-002 R2 review and CIP Senior Manager approval.<br>
+Snapshot taken {{ at.strftime('%Y-%m-%d %H:%M') }} UTC by {{ by }}. {{ assets|length }} asset(s).</p>
+<table><tr><th>Asset</th><th>Type</th><th>Location</th><th>Routable external</th><th>Dial-up</th><th>Vendor remote access</th></tr>
+{% for a in assets %}<tr><td>{{ a.name }}</td><td>{{ a.asset_type }}</td><td>{{ a.location or '' }}</td><td>{{ 'Yes' if a.routable_external else 'No' }}</td><td>{{ 'Yes' if a.dialup else 'No' }}</td><td>{{ 'Yes' if a.vendor_remote_access_allowed else 'No' }}</td></tr>{% endfor %}
+</table></body></html>

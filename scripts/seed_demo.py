@@ -6,8 +6,10 @@ from datetime import date, timedelta
 from app.auth import hash_password
 from app.catalog import seed_requirements
 from app.db import Base, SessionLocal, engine
-from app.models import (AccessSession, Asset, AuditLog, Delegation, Evidence, Organization, Requirement, User,
-                        Vendor, VendorAccess, utcnow)
+from datetime import datetime
+
+from app.models import (AccessApproval, AccessSession, Asset, AuditLog, Delegation, Evidence, Organization,
+                        Requirement, User, Vendor, VendorAccess, utcnow)
 
 
 def main():
@@ -19,10 +21,14 @@ def main():
         return
     org = Organization(name="High Plains Electric Cooperative", ncr_id="NCR99999", regional_entity="WECC",
                        registered_functions="DP, TO, GO", cip_senior_manager="Dana Ortiz, General Manager",
-                       cip_senior_manager_since=date(2024, 6, 1))
+                       cip_senior_manager_since=date(2024, 6, 1), ignored_accounts="it-admin",
+                       audit_id="WECC-NCR99999-20270315", audit_period_start=date(2024, 3, 15),
+                       audit_period_end=date(2027, 3, 14))
     db.add(org)
     db.flush()
-    db.add(User(org_id=org.id, email="demo@prismcip.local", name="Demo Admin", role="admin",
+    db.add(User(org_id=org.id, email="demo@prismcip.local", name="Demo Admin", role="admin", can_sign=True,
+                password_hash=hash_password("demo-password-123")))
+    db.add(User(org_id=org.id, email="dana@prismcip.local", name="Dana Ortiz", role="viewer", can_sign=True,
                 password_hash=hash_password("demo-password-123")))
     db.add(Delegation(org_id=org.id, delegate_name="Chris Lee", delegate_title="Operations Manager",
                       authority="Approve CIP-002 R2 asset list reviews", effective_on=date(2025, 1, 6)))
@@ -51,9 +57,10 @@ def main():
                       disable_method="VPN account disabled after each session; operator can terminate active "
                                      "tunnel from firewall console.",
                       detect_method="IPS profile and botnet C2 blocking on the vendor VPN zone; alerts emailed "
-                                    "to IT and the SOC.", approved_by="Dana Ortiz", approved_on=date(2026, 3, 20))
+                                    "to IT and the SOC.", approved_by="Dana Ortiz", approved_on=date(2026, 3, 20),
+                      accounts="relaypros-jalvarez")
     p2 = VendorAccess(org_id=org.id, vendor_id=oem.id, asset_id=plant.id, access_method="Cellular modem",
-                      determine_method="OEM portal session report pulled monthly.")
+                      determine_method="OEM portal session report pulled monthly.", accounts="oem-noc")
     db.add_all([p1, p2])
     db.flush()
     now = utcnow()
@@ -62,6 +69,9 @@ def main():
                          ended_at=now - timedelta(days=12, hours=1), ended_by="chris.lee", end_reason="Completed"))
     db.add(AccessSession(org_id=org.id, access_id=p2.id, vendor_person="OEM NOC", purpose="Controller fault review",
                          approved_by="chris.lee", started_at=now - timedelta(hours=2)))
+    db.add(AccessApproval(org_id=org.id, access_id=p1.id, starts_at=datetime(2026, 11, 2, 14, 30),
+                          ends_at=datetime(2026, 11, 2, 18, 0), purpose="Relay firmware 3.1 at North Sub",
+                          ticket="CHG-4471", approved_by="chris.lee"))
     reqs = {r.code: r for r in db.query(Requirement).all()}
     for code, title, when in [
         ("CIP-002 R1.3", "Asset identification worksheet", date(2026, 2, 10)),
@@ -78,6 +88,7 @@ def main():
     db.add(AuditLog(org_id=org.id, actor="system", action="demo_loaded", detail="Demo data"))
     db.commit()
     print("Loaded. Sign in as demo@prismcip.local / demo-password-123")
+    print("Try Remote access → Import sessions with samples/fortigate_vpn_events.log")
 
 
 if __name__ == "__main__":

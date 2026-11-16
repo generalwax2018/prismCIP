@@ -6,12 +6,14 @@
 <p class="sub">{{ p.access_method }} · {{ pill(p.status, 'ok' if p.status == 'Disabled' else 'warn') }} · Section 6 {{ pill('complete','ok') if p.section6_complete else pill('incomplete','bad') }}</p></div>
 {% if user.role != 'viewer' %}
 <form method="post" action="/access/{{ p.id }}/toggle" data-confirm="{{ 'Disable this vendor access path? Open sessions will be closed.' if p.status == 'Enabled' else 'Re-enable this vendor access path?' }}">{{ csrf_field() }}
-<button class="{{ 'danger' if p.status == 'Enabled' else '' }}">{{ 'Disable access now' if p.status == 'Enabled' else 'Re-enable access' }}</button></form>{% endif %}
+<button class="{{ 'danger solid' if p.status == 'Enabled' else '' }}">{{ 'Disable access now' if p.status == 'Enabled' else 'Re-enable access' }}</button></form>{% endif %}
 </div>
 <div class="grid g2">
 <div class="card s6"><h2 class="mt0">Section 6 methods</h2>
 <form method="post" class="stack">{{ csrf_field() }}
 <label>Access method</label><select name="access_method">{% for m in methods %}<option {{ 'selected' if p.access_method == m }}>{{ m }}</option>{% endfor %}</select>
+<label>Accounts used on this path <span class="hint">VPN or remote-tool usernames, comma separated; used to match imported sessions</span></label>
+<input type="text" name="accounts" value="{{ p.accounts or '' }}" placeholder="e.g. relaypros-jalvarez, relaypros-svc">
 <label>6.1 How you determine vendor remote access is happening</label>
 <textarea name="determine_method" placeholder="e.g. Vendor requests access by ticket; jump host logs every session; daily review of VPN connection report">{{ p.determine_method or '' }}</textarea>
 <label>6.2 How you disable it</label>
@@ -25,7 +27,27 @@
 {% if user.role != 'viewer' %}<form method="post" action="/access/{{ p.id }}/delete" class="actions" data-confirm="Delete this access path and its session history? Prefer disabling to keep the record.">{{ csrf_field() }}<button class="secondary">Delete path</button></form>{% endif %}
 </div>
 <div>
-<h2 class="mt0">Vendor sessions</h2>
+<div class="card">
+<div class="card-head"><h2>Approved access windows</h2><span class="muted small">Imported sessions must fall inside one</span></div>
+{% for w in p.approvals[:8] %}
+<div class="req-line"><div class="head"><div><b>{{ w.starts_at.strftime('%Y-%m-%d %H:%M') }} → {{ w.ends_at.strftime('%Y-%m-%d %H:%M') }} UTC</b>
+<div class="small muted">{{ w.purpose }}{% if w.ticket %} · {{ w.ticket }}{% endif %} · {{ 'requested by ' ~ w.requested_by if w.requested_by else '' }}{{ ' · approved by ' ~ w.approved_by if w.approved_by and w.status == 'Approved' else '' }}</div></div>
+<div class="chips-inline">{{ pill(w.status, {'Approved':'ok','Requested':'warn','Denied':'bad','Revoked':'neutral'}[w.status]) }}
+{% if user.role != 'viewer' %}
+{% if w.status == 'Requested' %}<form method="post" action="/approvals/{{ w.id }}/decide" class="inline">{{ csrf_field() }}<input type="hidden" name="decision" value="approve"><button class="small-btn">Approve</button></form>
+<form method="post" action="/approvals/{{ w.id }}/decide" class="inline">{{ csrf_field() }}<input type="hidden" name="decision" value="deny"><button class="secondary small-btn">Deny</button></form>
+{% elif w.status == 'Approved' %}<form method="post" action="/approvals/{{ w.id }}/decide" class="inline" data-confirm="Revoke this window? Later sessions in it will show as unapproved.">{{ csrf_field() }}<input type="hidden" name="decision" value="revoke"><button class="linkbtn">Revoke</button></form>{% endif %}
+{% endif %}</div></div></div>
+{% else %}<p class="muted small">No windows yet.</p>{% endfor %}
+{% if user.role != 'viewer' %}
+<form method="post" action="/access/{{ p.id }}/approvals" class="stack mt1">{{ csrf_field() }}
+<div class="row"><div><label>From (UTC)</label><input type="datetime-local" name="starts_at" value="{{ now }}" required></div>
+<div><label>To (UTC)</label><input type="datetime-local" name="ends_at" required></div></div>
+<div class="row"><div><label>Purpose</label><input type="text" name="purpose" required placeholder="e.g. Relay firmware update"></div><div><label>Ticket</label><input type="text" name="ticket"></div></div>
+<div class="actions"><button class="secondary">Approve window</button></div></form>
+{% endif %}
+</div>
+<h2 class="section-title mt1">Vendor sessions</h2>
 {% if user.role != 'viewer' and p.status == 'Enabled' %}
 <div class="card"><h3 class="mt0">Log a session</h3>
 <form method="post" action="/access/{{ p.id }}/sessions" class="stack">{{ csrf_field() }}
@@ -37,7 +59,8 @@
 {% for x in p.sessions %}
 <div class="card">
 <div class="head"><div><b>{{ x.vendor_person }}</b> — {{ x.purpose }}
-<div class="small muted mono">{{ x.started_at.strftime('%Y-%m-%d %H:%M') }} → {{ x.ended_at.strftime('%Y-%m-%d %H:%M') if x.ended_at else 'open' }} UTC · approved by {{ x.approved_by or '—' }}</div></div>
+<div class="small muted mono">{{ x.started_at.strftime('%Y-%m-%d %H:%M') }} → {{ x.ended_at.strftime('%Y-%m-%d %H:%M') if x.ended_at else 'open' }} UTC · approved by {{ x.approved_by or '—' }}{% if x.source_ip %} · {{ x.source_ip }}{% endif %}</div>
+<div class="chips-inline">{{ pill('From logs', 'neutral') if x.source == 'import' else pill('Logged', 'neutral') }}{% if x.external_key and x.source == 'manual' %}{{ pill('Confirmed by logs', 'ok') }}{% endif %}{% if x.source == 'import' and not x.approval_id %}{{ pill('No approval', 'bad') }}{% endif %}</div></div>
 <div>{% if not x.ended_at %}{{ pill('Open','warn') }}{% elif x.malicious_activity_noted %}{{ pill('Malicious activity','bad') }}{% else %}{{ pill(x.end_reason,'ok') }}{% endif %}</div></div>
 {% if x.notes %}<p class="small pre">{{ x.notes }}</p>{% endif %}
 {% if not x.ended_at and user.role != 'viewer' %}

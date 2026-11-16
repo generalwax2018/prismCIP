@@ -21,6 +21,12 @@
 {% for p in a.vendor_access %}<tr><td><a href="/access/{{ p.id }}">{{ p.vendor.name }}</a></td><td>{{ p.access_method }}</td>
 <td>{{ pill(p.status, 'ok' if p.status == 'Disabled' else 'warn') }}</td><td>{{ pill('Complete', 'ok') if p.section6_complete else pill('Incomplete', 'bad') }}</td></tr>{% endfor %}</table>
 {% else %}<div class="card muted">No vendor access paths for this asset.</div>{% endif %}
+{% if user.role != 'viewer' and a.routable_external %}
+<div class="card mt1"><h3 class="mt0">Firewall rule review (Section 3.1)</h3>
+<p class="small muted">Upload this site's FortiGate configuration backup. The rules are checked for any-to-any access, missing reasons, logging off, and vendor rules without inspection. The report is filed as evidence.</p>
+<form method="post" action="/assets/{{ a.id }}/firewall" enctype="multipart/form-data" class="stack">{{ csrf_field() }}
+<input type="file" name="file" required><div class="actions"><button class="secondary">Review rules</button></div></form></div>
+{% endif %}
 {% if user.role != 'viewer' %}
 <div class="card mt1"><h3 class="mt0">Add access path</h3>
 {% if vendors %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Firewall review{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/assets/{{ asset.id }}">← {{ asset.name }}</a></p>
+<header class="head"><div><h1>Firewall rule review — {{ asset.name }}</h1>
+<p class="sub">{{ summary.accept }} active permit rule(s) of {{ summary.rules }}. The full report is filed as Section 3.1 evidence for this asset; high issues are also opened as findings.</p></div></header>
+<div class="kpis">
+  <div class="kpi bad"><div class="label">High</div><div class="num">{{ summary.high }}</div></div>
+  <div class="kpi warn"><div class="label">Medium</div><div class="num">{{ summary.medium }}</div></div>
+  <div class="kpi"><div class="label">Low</div><div class="num">{{ summary.low }}</div></div>
+  <div class="kpi ok"><div class="label">Permit rules</div><div class="num">{{ summary.accept }}</div></div>
+</div>
+{% if issues %}<div class="card">
+{% for i in issues %}<div class="finding {{ i.severity }}"><span class="pill sev-{{ i.severity }}">{{ i.severity|capitalize }}</span> <b>{{ i.rule }}</b> <span class="small muted">{{ i.code }}</span><p class="small m0">{{ i.text }}</p></div>{% endfor %}
+</div>{% else %}<div class="card">No issues in active permit rules.</div>{% endif %}
+{% endblock %}

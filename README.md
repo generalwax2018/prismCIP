@@ -10,27 +10,34 @@ remote access** controls, which took effect April 1, 2026.
 
 | Area | What you get |
 |---|---|
-| **Assets** (CIP-002 R1.3) | The list of assets containing low impact BCS, with flags for routable external connectivity, dial-up and vendor remote access, plus Section 2 and 3.1 control descriptions for each asset |
-| **Vendor remote access** (Att1 S6) | Each vendor-to-asset access path with its 6.1 determine, 6.2 disable and 6.3 detect methods. A **Disable access now** button closes any open sessions and logs it. There's also a session log with approver, purpose, end reason and a flag for malicious activity |
-| **Requirements tracker** | 16 seeded requirements with plain-language summaries and hints on what makes good evidence. Due dates are calculated for the 15- and 36-month cadences. Statuses are Current, Due soon, Overdue, No evidence and Gap |
-| **Gap detection** | Finds missing 6.1/6.2/6.3 methods, assets that allow vendor access but have no paths recorded (and the reverse), routable assets with no access control written down, sessions open longer than 24 hours, and a missing CIP Senior Manager |
-| **Evidence** | File uploads (50 MB maximum, extension allowlist) with SHA-256 hashes. The date an activity was performed drives its next due date |
-| **Plan generator** | A draft CIP-003 low impact cyber security plan built from your records. Anything the app doesn't know is marked TODO, so nobody signs a plan claiming controls that don't exist. It can be printed or saved as a PDF |
-| **Audit package** | One-click zip containing a summary, the draft plan, CSVs (assets, access paths, sessions, evidence index with hashes and the 3-year retention flag, activity log) and the evidence files arranged by requirement |
-| **Governance** | CIP Senior Manager (R3) and delegations (R4) with dates. Admin, editor and viewer roles. An append-only activity log |
-
-Security notes: scrypt password hashing, signed session cookies (secure flag behind TLS), CSRF tokens on every
-form, a strict CSP (no inline script or style), org-scoped queries on every record (built multi-tenant from day one),
-and a container that runs as a non-root user.
+| **Assets** (CIP-002 R1.3) | Assets containing low impact BCS, with connectivity flags and Section 2 / 3.1 control descriptions |
+| **Vendor remote access** (Att1 S6) | Each vendor → asset path with its 6.1 / 6.2 / 6.3 methods, the accounts it uses, approved access windows, a session log, and a one-click **Disable access now** that closes open sessions |
+| **Session import** | Load FortiGate VPN event logs (SSL VPN and IPsec dial-up tunnel up/down) or CSV exports from GlobalProtect, BeyondTrust, Secomea, etc. Each session is matched to an access path by account and checked against approved windows. Unapproved sessions, sessions on disabled paths, sessions that ran past their window, and unknown accounts become **findings**. A token-protected API (`POST /api/v1/sessions`) lets a log forwarder push logs automatically |
+| **Vendor portal** | A private, expiring link per vendor. Vendors request access windows; you approve or deny them; approvals feed the session checks |
+| **Findings** | One queue for import and check results. Resolving needs a written reason. Open high/medium findings count as gaps on their requirement |
+| **Requirements tracker** | 16 requirements with 15/36-month due dates, the 180-day plan-update clock after each IR test (S4.6), statuses and gap detection |
+| **Program trackers** | Security awareness (S1), incident response exercises (S4.5 / S4.6) and transient devices / removable media (S5). Each entry is filed as evidence; malware found on a device opens a finding |
+| **Firewall review** (S3.1) | Upload a FortiGate config backup per asset. Flags any-to-any rules, any source/destination/service, rules with no reason, logging off, and vendor rules without IPS/AV or always on. Report filed as evidence; high issues become findings |
+| **Sign-offs** | CIP Senior Manager / delegate approvals of the policy, the CIP-002 R2 asset review and the plan. Documents are frozen with SHA-256 at request; the signer re-enters their password and types their name; the hash is re-checked before signing; approvals are filed as evidence |
+| **Reminders** | Email at 60, 30 and 7 days before each periodic deadline and when overdue, plus high findings and waiting sign-offs. Each milestone is sent once. SMTP, or `.eml` files in `data/outbox` when no server is set |
+| **Plan** | CIP-003 low impact plan built from records, with in-app editing of the narrative sections. Printable; anything unknown stays marked TODO |
+| **RSAW workbook** | Per requirement: what the auditor looks for, your written response (draft it from records, then edit), and the evidence index in RSAW columns. Exported on its own and inside the audit package, with working links to each file |
+| **Audit package** | One zip: summary, plan, assets, access paths, sessions, evidence (hashed, by requirement), activity log, RSAW workbook, sign-offs with signed documents, findings |
+| **Security** | scrypt passwords, optional two-step sign-in (TOTP, secrets sealed at rest, replay-protected, QR drawn locally), CSRF on every form, strict CSP, roles (admin / editor / viewer), signer flag, per-org data separation, append-only activity log, non-root container |
 
 ## Run locally
 
 ```bash
-python -m venv .venv && . .venv/bin/activate
+python -m venv .venv && . .venv/bin/activate   # Windows: python -m venv .venv; .venv\Scripts\activate
 pip install -r requirements-dev.txt
 python -m scripts.seed_demo          # optional demo co-op: demo@prismcip.local / demo-password-123
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
+
+Demo walkthrough: sign in, go to **Remote access → Import sessions** and upload `samples/fortigate_vpn_events.log`
+(one approved session, one unapproved, one unknown account, one ignored staff account). Upload
+`samples/fortigate_north_sub.conf` on the North Substation asset for a firewall review. Request a sign-off from
+Dana Ortiz (`dana@prismcip.local`, same password) and sign it as her.
 
 Open http://localhost:8000. With no demo data loaded, the first visit takes you to set up your organization and admin account.
 Data (the SQLite database, evidence files and session key) is stored in `./data`, or in `PRISMCIP_DATA_DIR` if that's set.
@@ -53,6 +60,22 @@ Data lives in the `prismcip-data` volume. Back it up. Evidence must be kept for 
 | `PRISMCIP_DATABASE_URL` | SQLite in the data directory | Point at Postgres later |
 | `PRISMCIP_SECRET_KEY` | Generated and saved in the data directory | Session signing |
 | `PRISMCIP_HTTPS` | `0` | Set to `1` behind TLS for secure cookies |
+| `PRISMCIP_BASE_URL` | | Public URL, used in reminder emails |
+| `PRISMCIP_SMTP_HOST` / `_PORT` / `_USER` / `_PASSWORD` | | Mail server for reminders (STARTTLS on 587, TLS on 465). Unset: messages go to `data/outbox` |
+| `PRISMCIP_MAIL_FROM` | `prismcip@localhost` | Sender address |
+| `PRISMCIP_REMINDERS` | `on` | `off` disables the in-app daily reminder job (use `python -m scripts.send_reminders` from cron instead) |
+| `PRISMCIP_REMINDER_HOUR` | `7` | Server-local hour after which the daily reminder run happens |
+
+## Pushing logs automatically
+
+Create a token in **Settings → Session import**, then from a log server or a scheduled task:
+
+```bash
+curl -X POST -H "Authorization: Bearer pcip_..." --data-binary @vpn-events.log https://cip.example.com/api/v1/sessions
+curl -X POST -H "Authorization: Bearer pcip_..." --data-binary @sessions.csv "https://cip.example.com/api/v1/sessions?format=csv"
+```
+
+Re-sending the same events is safe; duplicates are skipped.
 
 ## Assumptions to confirm
 
@@ -62,9 +85,15 @@ Data lives in the `prismcip-data` volume. Back it up. Evidence must be kept for 
 - CIP-003-11 (effective July 1, 2029) folds Section 6 into Section 3 and adds authentication for remote users.
   The catalog in `app/catalog.py` is versioned in a way that makes adding it a data change.
 
+## Upgrading
+
+New versions add tables and columns to an existing database automatically at startup; nothing is dropped. Back up
+the data folder before upgrading anyway.
+
 ## Roadmap ideas
 
-- Connectors that pull vendor sessions automatically from firewall and VPN logs or remote access tools (Fortinet, Palo Alto, BeyondTrust, Secomea)
-- Reminder emails before due dates, plus a CIP Senior Manager approval workflow with e-signature
-- CIP-003-11 catalog and a migration checklist
+- Native parsers for Palo Alto GlobalProtect syslog and Palo Alto / Cisco firewall configs
+- CIP-003-11 catalog and a readiness checklist (effective July 1, 2029)
 - Multi-org admin for consultants and G&T cooperatives that manage several members
+- SSO (Entra ID / OIDC), reusing RiskPrism's implementation
+- AI drafting help for plan sections and evidence sorting, human-approved, never setting status

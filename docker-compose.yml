@@ -4,6 +4,8 @@ services:
     restart: unless-stopped
     environment:
       PRISMCIP_HTTPS: "1"          # secure cookies; Caddy terminates TLS
+      PRISMCIP_BASE_URL: "https://cip.example.com"
+      # PRISMCIP_SMTP_HOST / _PORT / _USER / _PASSWORD and PRISMCIP_MAIL_FROM: set in .env for reminder email
       # PRISMCIP_SECRET_KEY: set in .env to keep sessions across rebuilds
     env_file: [.env]
     volumes: [prismcip-data:/data]

@@ -1,0 +1,23 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Findings{% endblock %}
+{% block content %}
+<header class="head"><div><h1>Findings</h1>
+<p class="sub">Things the session import or a check found that a person needs to review. High and medium findings count as gaps against the matching requirement until they're resolved.</p></div>
+<div class="head-actions"><a class="btn secondary" href="/findings?show={{ 'open' if show == 'all' else 'all' }}">{{ 'Open only' if show == 'all' else 'Include resolved' }}</a><a class="btn" href="/access/import">{{ icon('upload', 15) }}Import sessions</a></div></header>
+{% if rows %}
+<div class="card">
+{% for x in rows %}
+<div class="finding {{ x.severity if x.status == 'Open' else '' }}">
+  <div class="head"><div><span class="pill sev-{{ x.severity }}">{{ x.severity|capitalize }}</span> <b>{{ x.title }}</b>
+  <div class="small muted">{{ x.requirement_code or '' }} · {{ x.created_at.strftime('%Y-%m-%d %H:%M') }} UTC{% if x.access %} · <a href="/access/{{ x.access.id }}">open access path</a>{% endif %}</div></div>
+  <div>{{ pill(x.status, 'ok' if x.status == 'Resolved' else 'warn') }}</div></div>
+  {% if x.detail %}<p class="small m0">{{ x.detail }}</p>{% endif %}
+  {% if x.status == 'Resolved' %}<p class="small muted m0">Resolved by {{ x.resolved_by }} {{ x.resolved_at.strftime('%Y-%m-%d') }}: {{ x.resolution }}</p>
+  {% elif user.role != 'viewer' %}
+  <form method="post" action="/findings/{{ x.id }}/resolve">{{ csrf_field() }}<input type="text" name="resolution" placeholder="What was done, or why it's acceptable (e.g. emergency access, approved by phone, ticket #)" required><button class="secondary">Resolve</button></form>
+  {% endif %}
+</div>
+{% endfor %}
+</div>
+{% else %}<div class="card muted">No {{ 'open ' if show != 'all' }}findings. Import vendor sessions to check them against approvals.</div>{% endif %}
+{% endblock %}

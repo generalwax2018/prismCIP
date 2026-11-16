@@ -76,6 +76,24 @@ async def add_evidence(rid: int, request: Request, user: User = Depends(editor),
     return redirect(f"/requirements/{rid}", "Evidence added.", request)
 
 
+async def store_upload(upload, org_id: int) -> tuple[dict | None, str | None]:
+    """Save an uploaded evidence file. Returns (fields for Evidence, error message)."""
+    if not isinstance(upload, UploadFile) or not upload.filename:
+        return None, None
+    ext = Path(upload.filename).suffix.lower()
+    if ext not in ALLOWED:
+        return None, f"File type {ext or '(none)'} isn't allowed."
+    data = await upload.read(MAX_BYTES + 1)
+    if len(data) > MAX_BYTES:
+        return None, "File is larger than 50 MB."
+    org_dir = UPLOAD_DIR / str(org_id)
+    org_dir.mkdir(parents=True, exist_ok=True)
+    stored = f"{uuid.uuid4().hex}{ext}"
+    (org_dir / stored).write_bytes(data)
+    return dict(file_name=Path(upload.filename).name[:300], stored_name=stored,
+                sha256=hashlib.sha256(data).hexdigest()), None
+
+
 def evidence_path(ev: Evidence) -> Path:
     return UPLOAD_DIR / str(ev.org_id) / ev.stored_name
 

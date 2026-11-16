@@ -1,0 +1,31 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}RSAW workbook{% endblock %}
+{% block content %}
+<header class="head"><div><h1>RSAW workbook</h1>
+<p class="sub">Your audit responses arranged the way Reliability Standard Audit Worksheets are: what the auditor looks for, your written response, and the evidence index for each requirement. Copy the responses into your Regional Entity's current RSAW form; the export and the audit package link each file.</p>
+<p class="small muted">{% if org.audit_id %}Audit {{ org.audit_id }} · {% endif %}{% if org.audit_period_start or org.audit_period_end %}Audit period {{ org.audit_period_start or '…' }} to {{ org.audit_period_end or '…' }} (evidence outside it is listed separately){% else %}Set the audit period in <a href="/settings">Settings</a> to filter evidence{% endif %}</p></div>
+<div class="head-actions">{% if user.role != 'viewer' %}<form method="post" action="/rsaw-draft-all" class="inline">{{ csrf_field() }}<button class="secondary">Draft empty responses</button></form>{% endif %}<a class="btn" href="/rsaw/export">{{ icon('download', 15) }}Export workbook</a></div></header>
+{% for sec in sections %}
+<h2 class="section-title">{{ sec.standard }} · {{ sec.heading }}</h2>
+{% for it in sec.reqs %}
+<div class="card" id="r{{ ids[it.code] }}">
+<div class="card-head"><h2>{{ it.code }} <span class="small muted">{{ it.st.req.title }}</span></h2>{{ pill(it.st.status, it.st.css) }}</div>
+<dl class="kv"><dt>Requirement</dt><dd class="small">{{ it.st.req.summary }}</dd><dt>Auditor looks for</dt><dd class="small">{{ it.focus }}</dd></dl>
+{% if it.findings %}<ul class="gaps">{% for x in it.findings %}<li><a href="/findings">Open finding</a>: {{ x.title }}</li>{% endfor %}</ul>{% endif %}
+<form method="post" action="/rsaw/{{ ids[it.code] }}" class="stack">{{ csrf_field() }}
+<label>Registered entity response {% if it.narrative %}<span class="hint">last saved {{ it.narrative.updated_at.strftime('%Y-%m-%d') }} by {{ it.narrative.updated_by }}</span>{% endif %}</label>
+<textarea name="body" rows="4" {{ 'readonly' if user.role == 'viewer' }}>{{ it.narrative.body if it.narrative else '' }}</textarea>
+{% if user.role != 'viewer' %}<div class="actions"><button class="secondary" name="action" value="save">Save response</button>
+<button class="secondary" name="action" value="draft" data-confirm-click="Replace this response with a draft built from your records?">Draft from records</button></div>{% endif %}
+</form>
+<h3>Evidence in the audit period</h3>
+{% if it.generated %}<p class="small muted m0">Also generated into the audit package: {% for g in it.generated %}<span class="mono">{{ g[0] }}</span> ({{ g[1] }}){{ ', ' if not loop.last }}{% endfor %}</p>{% endif %}
+{% if it.evidence %}<table><tr><th>File name</th><th>Document title</th><th>Date</th><th>Relevant section</th><th>Description of applicability</th></tr>
+{% for e in it.evidence %}<tr><td class="small">{% if e.stored_name %}<a href="/evidence/{{ e.id }}/download">{{ e.file_name }}</a>{% else %}<span class="muted">record only</span>{% endif %}</td>
+<td class="small">{{ e.title }}</td><td class="mono">{{ e.performed_on }}</td><td class="small">{{ e.asset.name if e.asset else 'All assets' }}</td><td class="small">{{ e.description or '' }}</td></tr>{% endfor %}</table>
+{% else %}<p class="small muted">No evidence in the audit period. <a href="/requirements/{{ ids[it.code] }}">Add evidence</a></p>{% endif %}
+{% if it.evidence_outside %}<p class="small muted">{{ it.evidence_outside|length }} older item(s) outside the audit period.</p>{% endif %}
+</div>
+{% endfor %}
+{% endfor %}
+{% endblock %}

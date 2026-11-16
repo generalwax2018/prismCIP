@@ -1,0 +1,29 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Sign-offs{% endblock %}
+{% block content %}
+<header class="head"><div><h1>Sign-offs</h1>
+<p class="sub">CIP Senior Manager (or delegate) approvals. The document is frozen with a SHA-256 hash when you request a sign-off. An approval becomes evidence for its requirement, with a signature record attached.</p></div></header>
+{% if mine %}<div class="card s6"><div class="card-head"><h2>Waiting for you</h2></div>
+{% for x in mine %}<div class="req-line"><a href="/signoffs/{{ x.id }}"><b>{{ x.title }}</b></a> <span class="small muted">requested by {{ x.requested_by }} · {{ x.requested_at.strftime('%Y-%m-%d') }}</span></div>{% endfor %}</div>{% endif %}
+<div class="grid g2">
+<div>
+{% if rows %}<table><tr><th>Document</th><th>Signer</th><th>Requested</th><th>Status</th></tr>
+{% for x in rows %}<tr><td><a href="/signoffs/{{ x.id }}">{{ x.title }}</a><div class="small muted">{{ x.requirement.code if x.requirement else x.kind }}</div></td><td>{{ x.signer.name }}</td><td class="mono">{{ x.requested_at.strftime('%Y-%m-%d') }}</td>
+<td>{{ pill(x.status, {'Approved':'ok','Pending':'warn','Rejected':'bad'}[x.status]) }}</td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">No sign-offs yet.</div>{% endif %}
+</div>
+{% if user.role != 'viewer' %}
+<div class="card"><div class="card-head"><h2>Request a sign-off</h2></div>
+{% if signers %}
+<form method="post" enctype="multipart/form-data" class="stack">{{ csrf_field() }}
+<label>What needs approval</label>
+<select name="kind">{% for k, v in kinds.items() %}<option value="{{ k }}">{{ v[0] }}</option>{% endfor %}</select>
+<p class="small muted">The asset list and the plan are captured from your records automatically. For policies and other documents, attach the file.</p>
+<label>Title <span class="hint">optional</span></label><input type="text" name="title" placeholder="e.g. Low impact policy v5">
+<label>File <span class="hint">needed for policies and other documents</span></label><input type="file" name="file">
+<label>Signer</label><select name="signer_id">{% for u in signers %}<option value="{{ u.id }}">{{ u.name }}{{ ' (you)' if u.id == user.id }}</option>{% endfor %}</select>
+<div class="actions"><button>Request sign-off</button></div></form>
+{% else %}<p class="muted">No one is marked as a signer yet. In <a href="/settings">Settings</a>, mark the CIP Senior Manager and any delegates as signers.</p>{% endif %}
+</div>{% endif %}
+</div>
+{% endblock %}

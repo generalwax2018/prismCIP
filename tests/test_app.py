@@ -1,5 +1,7 @@
 import io
 import os
+os.environ.setdefault("PRISMCIP_REMINDERS", "off")
+import os
 import re
 import tempfile
 import zipfile
@@ -151,3 +153,63 @@ def test_unauthenticated_redirects():
     with TestClient(app) as anon:
         r = anon.get("/assets", follow_redirects=False)
         assert r.status_code == 303 and r.headers["location"] == "/login"
+
+
+def test_plan_editor_fills_todos(client):
+    before = client.get("/plan").text.count('class="todo"')
+    r = post(client, "/plan/edit", dict(s1_method="Annual awareness bulletin every March.",
+                                        s4_plan_ref="IR Plan v3 on SharePoint"), from_url="/plan/edit")
+    assert r.status_code == 303
+    page = client.get("/plan").text
+    assert "Annual awareness bulletin every March." in page and "IR Plan v3 on SharePoint" in page
+    assert page.count('class="todo"') == before - 2
+
+
+def test_program_trackers_file_evidence_and_s46_clock(client):
+    import re as _re
+    from app.db import SessionLocal
+    from app.models import Evidence, ProgramRecord
+    r = post(client, "/programs/awareness", dict(title="Awareness bulletin", performed_on="2026-03-02",
+                                                 method="Email bulletin", audience="All staff"),
+             from_url="/programs/awareness")
+    assert r.status_code == 303
+    post(client, "/programs/exercise", dict(title="Ransomware tabletop", performed_on="2026-01-10", method="Tabletop",
+                                            audience="GM, IT"), from_url="/programs/exercise")
+    reqs = client.get("/requirements").text
+    assert "after the 2026-01-10 test is due by 2026-07-09" in reqs
+    with SessionLocal() as db:
+        rid = db.query(ProgramRecord).filter_by(kind="exercise").first().id
+    post(client, f"/programs/exercise/{rid}/plan-updated", dict(plan_updated_on="2026-02-20",
+                                                                 note="Added E-ISAC contact"), from_url="/programs/exercise")
+    assert "after the 2026-01-10 test is due" not in client.get("/requirements").text
+    post(client, "/programs/transient", dict(title="Vendor laptop", performed_on="2026-04-01",
+                                             device_owner="Vendor-managed TCA", result="Malware found"),
+         from_url="/programs/transient")
+    assert "Malicious code found on a transient device" in client.get("/findings").text
+    with SessionLocal() as db:
+        codes = {e.requirement.code for e in db.query(Evidence).all()}
+    assert {"CIP-003 Att1 S1", "CIP-003 Att1 S4.5", "CIP-003 Att1 S4.6", "CIP-003 Att1 S5"} <= codes
+
+
+def test_firewall_review_files_evidence_and_findings(client):
+    from pathlib import Path
+    from app.db import SessionLocal
+    from app.fwreview import parse_fortigate_policies, review
+    from app.models import Asset, Evidence, Finding
+    cfg = (Path(__file__).resolve().parent.parent / "samples" / "fortigate_north_sub.conf").read_bytes()
+    issues = review(parse_fortigate_policies(cfg.decode()))
+    assert sum(i.severity == "high" for i in issues) == 1
+    assert not any(i.rule.startswith("Policy 1 ") for i in issues)  # justified DNP3 rule is clean
+    assert not any("Policy 4" in i.rule or "Policy 5" in i.rule for i in issues)  # disabled and deny skipped
+    with SessionLocal() as db:
+        aid = db.query(Asset).filter_by(name="North Substation").first().id
+    r = client.post(f"/assets/{aid}/firewall", data=dict(csrf=CSRF.search(client.get(f"/assets/{aid}").text).group(1)),
+                    files={"file": ("fgt.conf", io.BytesIO(cfg), "text/plain")})
+    assert r.status_code == 200 and "Firewall rule review" in r.text
+    with SessionLocal() as db:
+        assert db.query(Evidence).filter(Evidence.title.like("Firewall rule review%")).count() == 1
+        assert db.query(Finding).filter_by(kind="firewall_rule").count() == 1
+    bad = client.post(f"/assets/{aid}/firewall", data=dict(csrf=CSRF.search(client.get(f"/assets/{aid}").text).group(1)),
+                      files={"file": ("x.conf", io.BytesIO(b"hostname router\n"), "text/plain")},
+                      follow_redirects=False)
+    assert bad.status_code == 303

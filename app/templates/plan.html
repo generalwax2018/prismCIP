@@ -3,6 +3,6 @@
 {% block content %}
 <div class="head noprint"><div><h1>Low impact cyber security plan</h1>
 <p class="sub">Generated from your records. {% if todos %}<b>{{ todos }}</b> item(s) from your records still need a description;{% endif %} narrative sections marked TODO need your process written in.</p></div>
-<div class="actions m0"><button type="button" data-print>Print / save PDF</button></div></div>
+<div class="actions m0">{% if user.role != 'viewer' %}<a class="btn secondary" href="/plan/edit">Edit sections</a><a class="btn secondary" href="/signoffs">Request sign-off</a>{% endif %}<button type="button" data-print>Print / save PDF</button></div></div>
 <div class="plan">{% include "_plan_body.html" %}</div>
 {% endblock %}

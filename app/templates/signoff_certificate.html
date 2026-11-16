@@ -1,0 +1,15 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Signature record — {{ so.title }}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:760px;margin:2rem auto;color:#1b2330;line-height:1.5}dt{color:#5d6878;margin-top:.6rem}dd{margin:0;font-weight:600}code{font-size:13px;word-break:break-all}</style></head><body>
+<h1>Approval record</h1>
+<p>{{ org.name }}{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}</p>
+<dl>
+<dt>Document</dt><dd>{{ so.title }} ({{ so.file_name }})</dd>
+<dt>Document SHA-256 (frozen when requested)</dt><dd><code>{{ so.sha256 }}</code></dd>
+<dt>Requirement</dt><dd>{{ so.requirement.code if so.requirement else '—' }}</dd>
+<dt>Requested by</dt><dd>{{ so.requested_by }} on {{ so.requested_at.strftime('%Y-%m-%d %H:%M') }} UTC</dd>
+<dt>Decision</dt><dd>{{ so.status }} on {{ so.decided_at.strftime('%Y-%m-%d %H:%M') }} UTC</dd>
+<dt>Signed by</dt><dd>{{ so.signature_name }} ({{ user.email }}){% if org.cip_senior_manager %}; CIP Senior Manager on record: {{ org.cip_senior_manager }}{% endif %}</dd>
+{% if so.decision_note %}<dt>Note</dt><dd>{{ so.decision_note }}</dd>{% endif %}
+</dl>
+<p>The signer re-entered their password and typed their name to approve. The document hash was verified at the time of signing.</p>
+</body></html>

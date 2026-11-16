@@ -1,4 +1,5 @@
 {% macro t(v) %}{% if v %}{{ v }}{% else %}<span class="todo">{{ TODO }}</span>{% endif %}{% endmacro %}
+{% macro w(key, hint) %}{% if text[key] %}<span class="pre">{{ text[key] }}</span>{% else %}<span class="todo">{{ hint }}</span>{% endif %}{% endmacro %}
 <h1>Cyber Security Plan for Assets Containing Low Impact BES Cyber Systems</h1>
 <p><b>{{ org.name }}</b>{% if org.ncr_id %} · NCR {{ org.ncr_id }}{% endif %}{% if org.regional_entity %} · {{ org.regional_entity }}{% endif %}<br>
 Prepared under CIP-003-9 Requirement R2 and Attachment 1 · Draft generated {{ today }}</p>
@@ -13,7 +14,8 @@ Prepared under CIP-003-9 Requirement R2 and Attachment 1 · Draft generated {{ t
 {% if delegations %}<p>Active delegations of authority:</p><ul>{% for dl in delegations %}<li>{{ dl.delegate_name }}{% if dl.delegate_title %}, {{ dl.delegate_title }}{% endif %} — {{ dl.authority }} (effective {{ dl.effective_on }})</li>{% endfor %}</ul>{% endif %}
 
 <h2>3. Section 1 — Cyber security awareness</h2>
-<p>At least once every 15 calendar months, {{ org.name }} reinforces cyber security practices with personnel who have access to these assets, using: <span class="todo">describe method — e.g. annual email bulletin, toolbox talk, posters</span>.</p>
+<p>At least once every 15 calendar months, {{ org.name }} reinforces cyber security practices with personnel who have access to these assets, as follows:</p>
+<p>{{ w('s1_method', 'describe method — e.g. annual email bulletin, toolbox talk, posters') }}</p>
 
 <h2>4. Section 2 — Physical security controls</h2>
 <p>Physical access is controlled based on need to each asset (or the locations of its low impact BCS) and to any Cyber Assets that provide Section 3.1 electronic access controls.</p>
@@ -22,17 +24,17 @@ Prepared under CIP-003-9 Requirement R2 and Attachment 1 · Draft generated {{ t
 <h2>5. Section 3 — Electronic access controls</h2>
 <p>Where routable protocol communication crosses the asset boundary, only necessary inbound and outbound access is permitted and all other access is denied.</p>
 <table><tr><th>Asset</th><th>Controls</th></tr>{% for a, v in electronic %}<tr><td>{{ a.name }}</td><td>{{ t(v) }}</td></tr>{% endfor %}</table>
-{% if dialup %}<p>Dial-up Connectivity exists at: {{ dialup|map(attribute='name')|join(', ') }}. It is authenticated by: <span class="todo">describe authentication method</span>.</p>
+{% if dialup %}<p>Dial-up Connectivity exists at: {{ dialup|map(attribute='name')|join(', ') }}. It is authenticated as follows: {{ w('s3_dialup_auth', 'describe authentication method') }}</p>
 {% else %}<p>No Dial-up Connectivity to low impact BCS is recorded.</p>{% endif %}
 
 <h2>6. Section 4 — Cyber security incident response</h2>
 <p>{{ org.name }} maintains incident response plan(s) covering identification, classification and response; determination of whether an incident is a Reportable Cyber Security Incident and notification to the E-ISAC; roles and responsibilities; and incident handling. The plan is tested at least once every 36 calendar months and updated, if needed, within 180 calendar days of a test or an actual Reportable Cyber Security Incident.</p>
-<p>Plan document reference: <span class="todo">name and location of the incident response plan</span></p>
+<p>Plan document reference: {{ w('s4_plan_ref', 'name and location of the incident response plan') }}</p>
 
 <h2>7. Section 5 — Transient Cyber Assets and Removable Media</h2>
-<p>Entity-managed TCAs: <span class="todo">method(s), e.g. antivirus, application allowlisting, restricted use</span><br>
-Third-party-managed TCAs: <span class="todo">review of vendor's mitigation or entity scan before connection</span><br>
-Removable Media: <span class="todo">method to detect malicious code before use, e.g. kiosk scan</span></p>
+<p><b>Entity-managed Transient Cyber Assets.</b> {{ w('s5_tca_entity', "method(s), e.g. antivirus, application allowlisting, restricted use") }}</p>
+<p><b>Transient Cyber Assets managed by a party other than the entity.</b> {{ w('s5_tca_third', "review of vendor's mitigation or entity scan before connection") }}</p>
+<p><b>Removable Media.</b> {{ w('s5_rm', "method to detect malicious code before use, e.g. kiosk scan") }}</p>
 
 <h2>8. Section 6 — Vendor electronic remote access security controls</h2>
 {% if s6 %}
@@ -47,7 +49,7 @@ Removable Media: <span class="todo">method to detect malicious code before use, 
 {% else %}<p>No asset allows vendor electronic remote access. If that changes, this section must be completed before access is enabled.</p>{% endif %}
 
 <h2>9. CIP Exceptional Circumstances</h2>
-<p><span class="todo">describe how CIP Exceptional Circumstances are declared and responded to</span></p>
+<p>{{ w('cip_exceptional', 'describe how CIP Exceptional Circumstances are declared and responded to') }}</p>
 
 <h2>Approval</h2>
 <p>Reviewed and approved by the CIP Senior Manager or delegate. Policies and this plan are reviewed at least once every 15 calendar months.</p>

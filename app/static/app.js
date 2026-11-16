@@ -6,3 +6,7 @@ document.addEventListener("submit", (e) => {
 document.addEventListener("click", (e) => {
   if (e.target.closest("[data-print]")) window.print();
 });
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-confirm-click]");
+  if (b && !window.confirm(b.getAttribute("data-confirm-click"))) e.preventDefault();
+});

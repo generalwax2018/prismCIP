@@ -1,0 +1,26 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Access request{% endblock %}
+{% block bare %}
+<div class="login-card setup-card portal-card">
+  <div class="app-icon lg">{{ icon('diamond', 28, 2) }}</div>
+  <h1>Request remote access</h1>
+  <p class="sub">{{ vendor.name }} · requests go to the utility for approval. Don't connect until a request is approved.</p>
+  {% if flash %}<div class="flash" role="status">{{ flash }}</div>{% endif %}
+  {% if paths %}
+  <form method="post" class="stack">{{ csrf_field() }}
+    <label>Site</label><select name="access_id">{% for p in paths %}<option value="{{ p.id }}">{{ p.asset.name }} — {{ p.access_method }}</option>{% endfor %}</select>
+    <label>Your name</label><input type="text" name="person" required maxlength="200">
+    <div class="row"><div><label>From (UTC)</label><input type="datetime-local" name="starts_at" required></div>
+    <div><label>To (UTC)</label><input type="datetime-local" name="ends_at" required></div></div>
+    <label>Purpose</label><input type="text" name="purpose" required maxlength="2000" placeholder="e.g. Update relay firmware to 3.2">
+    <label>Your ticket or work order <span class="hint">optional</span></label><input type="text" name="ticket" maxlength="100">
+    <label class="check"><input type="checkbox" name="terms" required> I'll connect only during the approved window, only to what the work needs, disconnect when done, and report anything suspicious to the utility right away.</label>
+    <button>Send request</button>
+  </form>
+  {% else %}<p class="muted">No remote access is set up for {{ vendor.name }} right now. Contact the utility.</p>{% endif %}
+  {% if recent %}<h3>Your recent requests</h3>
+  {% for w in recent %}<div class="req-line small"><b>{{ w.access.asset.name }}</b> · {{ w.starts_at.strftime('%Y-%m-%d %H:%M') }}–{{ w.ends_at.strftime('%H:%M') }} UTC
+  {{ pill(w.status, {'Approved':'ok','Requested':'warn','Denied':'bad','Revoked':'neutral'}[w.status]) }}</div>{% endfor %}{% endif %}
+  <p class="small muted mt1">Link expires {{ vendor.portal_expires }}.</p>
+</div>
+{% endblock %}

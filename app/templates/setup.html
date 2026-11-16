@@ -1,10 +1,11 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
-{% block title %}Set up{% endblock %}{% block main_class %}narrow{% endblock %}
-{% block content %}
-<div class="card">
-<h1>◆ Set up PrismCIP</h1>
-<p class="sub">Create your utility and the first admin account.</p>
-<form method="post" class="stack">{{ csrf_field() }}
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Set up{% endblock %}
+{% block bare %}
+<form method="post" class="login-card setup-card stack">{{ csrf_field() }}
+  <div class="app-icon lg">{{ icon('diamond', 28, 2) }}</div>
+  <h1>Set up PrismCIP</h1>
+  <p class="sub">Create your utility and the first admin account.</p>
+  {% if error %}<p class="login-error" role="alert">{{ error }}</p>{% endif %}
   <label>Utility / registered entity name</label><input type="text" name="org_name" required>
   <div class="row">
     <div><label>NCR ID <span class="hint">optional</span></label><input type="text" name="ncr_id"></div>
@@ -15,6 +16,6 @@
   <label>Your name</label><input type="text" name="name" required>
   <label>Email</label><input type="email" name="email" required>
   <label>Password <span class="hint">12+ characters</span></label><input type="password" name="password" minlength="12" required>
-  <div class="actions"><button>Create</button></div>
-</form></div>
+  <button>Create</button>
+</form>
 {% endblock %}

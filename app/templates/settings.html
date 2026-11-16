@@ -1,9 +1,11 @@
-{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn with context %}
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Settings</h1><p class="sub">Organization, CIP Senior Manager (R3), delegations (R4) and user accounts.</p>
+<header class="head"><div><h1>Settings</h1>
+<p class="sub">Organization and audit details, CIP Senior Manager (R3), delegations (R4), signers, reminders, session import, and user accounts.</p></div></header>
 <div class="grid g2">
-<div class="card"><h2 class="mt0">Organization</h2>
+
+<div class="card"><div class="card-head"><h2>Organization</h2></div>
 <form method="post" action="/settings/org" class="stack">{{ csrf_field() }}
 <label>Name</label><input type="text" name="name" value="{{ org.name }}" required>
 <div class="row"><div><label>NCR ID</label><input type="text" name="ncr_id" value="{{ org.ncr_id or '' }}"></div>
@@ -11,14 +13,46 @@
 <label>Registered functions</label><input type="text" name="registered_functions" value="{{ org.registered_functions or '' }}">
 <div class="row"><div><label>CIP Senior Manager <span class="hint">R3</span></label><input type="text" name="cip_senior_manager" value="{{ org.cip_senior_manager or '' }}"></div>
 <div><label>In role since</label><input type="date" name="cip_senior_manager_since" value="{{ org.cip_senior_manager_since or '' }}"></div></div>
+<label>Next audit ID <span class="hint">shown on the RSAW workbook</span></label><input type="text" name="audit_id" value="{{ org.audit_id or '' }}" placeholder="e.g. WECC-NCR12345-20270315">
+<div class="row"><div><label>Audit period start</label><input type="date" name="audit_period_start" value="{{ org.audit_period_start or '' }}"></div>
+<div><label>Audit period end</label><input type="date" name="audit_period_end" value="{{ org.audit_period_end or '' }}"></div></div>
 <p class="small muted">Changes to the CIP Senior Manager must be documented within 30 calendar days. Every change here is recorded in the activity log.</p>
 {% if user.role == 'admin' %}<div class="actions"><button>Save</button></div>{% endif %}</form></div>
 
-<div class="card"><h2 class="mt0">Delegations of authority <span class="small muted">R4</span></h2>
-{% for dl in delegations %}<div class="mb"><b>{{ dl.delegate_name }}</b>{% if dl.delegate_title %}, {{ dl.delegate_title }}{% endif %}
+<div class="stack">
+<div class="card"><div class="card-head"><h2>Your account</h2></div>
+<form method="post" action="/settings/me" class="stack">{{ csrf_field() }}
+<label>Name <span class="hint">used when you sign</span></label><input type="text" name="name" value="{{ user.name }}">
+<label class="check"><input type="checkbox" name="notify" {{ 'checked' if user.notify }}> Email me reminders and sign-off requests</label>
+<div class="actions"><button class="secondary">Save</button><a class="btn secondary" href="/settings/mfa">{{ 'Manage' if user.totp_secret else 'Turn on' }} two-step sign-in</a></div></form></div>
+
+<div class="card"><div class="card-head"><h2>Reminders</h2><span class="muted small">{{ mail_status }}</span></div>
+<p class="small muted m0">Sent at 60, 30 and 7 days before each periodic deadline, when overdue, for high findings, and to signers when a sign-off waits more than 2 days. Each one goes out once.</p>
+{% if reminder_items %}<ul class="gaps">{% for i in reminder_items[:8] %}<li>{{ i.text }}</li>{% endfor %}{% if reminder_items|length > 8 %}<li>…and {{ reminder_items|length - 8 }} more</li>{% endif %}</ul>
+{% else %}<p class="small">Nothing waiting to be sent.</p>{% endif %}
+{% if user.role == 'admin' and reminder_items %}<form method="post" action="/settings/reminders/send" class="actions">{{ csrf_field() }}<button class="secondary">Send now</button></form>{% endif %}
+</div>
+</div>
+
+<div class="card"><div class="card-head"><h2>Users and signers</h2></div>
+<table><tr><th>User</th><th>Role</th><th>Signer</th><th></th></tr>
+{% for u in users %}<tr><td>{{ u.name }}<div class="small muted">{{ u.email }}{{ ' · 2-step on' if u.totp_secret }}</div></td><td>{{ u.role }}</td>
+<td>{% if user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/signer" class="inline">{{ csrf_field() }}<button class="linkbtn">{{ pill('Signer','ok') if u.can_sign else pill('No','neutral') }}</button></form>{% else %}{{ pill('Signer','ok') if u.can_sign else pill('No','neutral') }}{% endif %}</td>
+<td>{% if u.id != user.id and user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/toggle" class="inline">{{ csrf_field() }}<button class="secondary small-btn">{{ 'Disable' if u.active else 'Enable' }}</button></form>
+{% if u.totp_secret %}<form method="post" action="/settings/users/{{ u.id }}/reset-mfa" class="inline" data-confirm="Reset two-step sign-in for {{ u.email }}?">{{ csrf_field() }}<button class="linkbtn">Reset 2-step</button></form>{% endif %}{% elif not u.active %}disabled{% endif %}</td></tr>{% endfor %}</table>
+<p class="small muted">Signers approve policies, the asset list review and the plan. Mark the CIP Senior Manager and any delegates. A viewer can be a signer.</p>
+{% if user.role == 'admin' %}<form method="post" action="/settings/users" class="stack">{{ csrf_field() }}
+<div class="row"><div><label>Name</label><input type="text" name="name"></div><div><label>Email</label><input type="email" name="email" required></div></div>
+<div class="row"><div><label>Role</label><select name="role">{% for r in roles %}<option {{ 'selected' if r == 'editor' }}>{{ r }}</option>{% endfor %}</select></div>
+<div><label>Temporary password</label><input type="password" name="password" minlength="12" required></div></div>
+<div class="actions"><button class="secondary">Add user</button></div></form>{% endif %}
+</div>
+
+<div class="card"><div class="card-head"><h2>Delegations of authority</h2><span class="small muted">R4</span></div>
+{% for dl in delegations %}<div class="req-line"><b>{{ dl.delegate_name }}</b>{% if dl.delegate_title %}, {{ dl.delegate_title }}{% endif %}
 {{ pill('Revoked ' ~ dl.revoked_on, 'neutral') if dl.revoked_on else pill('Active since ' ~ dl.effective_on, 'ok') }}
 <div class="small">{{ dl.authority }}</div>
-{% if not dl.revoked_on and user.role == 'admin' %}<form method="post" action="/settings/delegations/{{ dl.id }}/revoke" class="inline" data-confirm="Revoke this delegation?">{{ csrf_field() }}<button class="link red">Revoke</button></form>{% endif %}</div>
+{% if not dl.revoked_on and user.role == 'admin' %}<form method="post" action="/settings/delegations/{{ dl.id }}/revoke" class="inline" data-confirm="Revoke this delegation?">{{ csrf_field() }}<button class="linkbtn red">Revoke</button></form>{% endif %}</div>
 {% else %}<p class="muted">No delegations.</p>{% endfor %}
 {% if user.role == 'admin' %}<form method="post" action="/settings/delegations" class="stack">{{ csrf_field() }}
 <div class="row"><div><label>Delegate name</label><input type="text" name="delegate_name" required></div><div><label>Title</label><input type="text" name="delegate_title"></div></div>
@@ -27,15 +61,18 @@
 <div class="actions"><button class="secondary">Add delegation</button></div></form>{% endif %}
 </div>
 
-<div class="card"><h2 class="mt0">Users</h2>
-<table><tr><th>User</th><th>Role</th><th></th></tr>
-{% for u in users %}<tr><td>{{ u.name }}<div class="small muted">{{ u.email }}</div></td><td>{{ u.role }}</td>
-<td>{% if u.id != user.id and user.role == 'admin' %}<form method="post" action="/settings/users/{{ u.id }}/toggle" class="inline">{{ csrf_field() }}<button class="secondary">{{ 'Disable' if u.active else 'Enable' }}</button></form>{% elif not u.active %}disabled{% endif %}</td></tr>{% endfor %}</table>
-{% if user.role == 'admin' %}<form method="post" action="/settings/users" class="stack">{{ csrf_field() }}
-<div class="row"><div><label>Name</label><input type="text" name="name"></div><div><label>Email</label><input type="email" name="email" required></div></div>
-<div class="row"><div><label>Role</label><select name="role">{% for r in roles %}<option {{ 'selected' if r == 'editor' }}>{{ r }}</option>{% endfor %}</select></div>
-<div><label>Temporary password</label><input type="password" name="password" minlength="12" required></div></div>
-<div class="actions"><button class="secondary">Add user</button></div></form>{% endif %}
+<div class="card"><div class="card-head"><h2>Session import</h2></div>
+<form method="post" action="/settings/ingest" class="stack">{{ csrf_field() }}
+<label>Ignored staff accounts <span class="hint">your own employees' VPN accounts, so they don't show up as unmapped vendors</span></label>
+<textarea name="ignored_accounts" placeholder="it-admin, jsmith">{{ org.ignored_accounts or '' }}</textarea>
+{% if user.role == 'admin' %}<div class="actions"><button class="secondary">Save</button></div>{% endif %}</form>
+<h3>Ingest API</h3>
+<p class="small muted m0">{{ 'A token is active. Rotating it stops the old one.' if org.ingest_token_hash else 'No token yet. A log forwarder or scheduled script can push FortiGate logs or CSV to /api/v1/sessions with it.' }}</p>
+{% if user.role == 'admin' %}<div class="actions">
+<form method="post" action="/settings/ingest" class="inline">{{ csrf_field() }}<input type="hidden" name="action" value="token"><button class="secondary">{{ 'Rotate token' if org.ingest_token_hash else 'Create token' }}</button></form>
+{% if org.ingest_token_hash %}<form method="post" action="/settings/ingest" class="inline" data-confirm="Revoke the ingest token?">{{ csrf_field() }}<input type="hidden" name="action" value="revoke"><button class="danger">Revoke</button></form>{% endif %}
+</div>{% endif %}
 </div>
+
 </div>
 {% endblock %}

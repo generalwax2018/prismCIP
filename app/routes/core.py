@@ -54,10 +54,93 @@ async def login(request: Request, db: Session = Depends(get_db)):
     if not user or not user.active or not verify_password(f.get("password", ""), user.password_hash):
         return render(request, "login.html", error="Wrong email or password.")
     request.session.clear()
+    if user.totp_secret:
+        import time
+        request.session["mfa_uid"], request.session["mfa_at"], request.session["mfa_tries"] = user.id, time.time(), 0
+        return redirect("/login/mfa")
     request.session["uid"] = user.id
     audit(db, user, "login")
     db.commit()
     return redirect("/")
+
+
+@router.get("/login/mfa")
+def mfa_form(request: Request):
+    if not request.session.get("mfa_uid"):
+        return redirect("/login")
+    return render(request, "login_mfa.html")
+
+
+@router.post("/login/mfa", dependencies=[Depends(csrf_protect)])
+async def mfa_check(request: Request, db: Session = Depends(get_db)):
+    import time
+    from .. import totp
+    uid, started = request.session.get("mfa_uid"), request.session.get("mfa_at", 0)
+    if not uid or time.time() - started > 300 or request.session.get("mfa_tries", 0) >= 5:
+        request.session.clear()
+        return render(request, "login.html", error="Sign-in timed out or too many tries. Start again.")
+    user = db.get(User, uid)
+    f = await request.form()
+    secret = totp.unseal(user.totp_secret) if user and user.totp_secret else None
+    step = totp.verify(secret, f.get("code", ""), user.totp_last_step) if secret else None
+    if step is None:
+        request.session["mfa_tries"] = request.session.get("mfa_tries", 0) + 1
+        return render(request, "login_mfa.html", error="That code didn't work. Use the current code from your app.")
+    user.totp_last_step = step
+    request.session.clear()
+    request.session["uid"] = user.id
+    audit(db, user, "login", "with two-step code")
+    db.commit()
+    return redirect("/")
+
+
+@router.get("/settings/mfa")
+def mfa_setup(request: Request, user: User = Depends(current_user)):
+    from .. import totp
+    if user.totp_secret:
+        return render(request, "mfa.html", user, enrolled=True)
+    secret = request.session.get("mfa_new") or totp.new_secret()
+    request.session["mfa_new"] = secret
+    uri = totp.uri(secret, user.email, f"PrismCIP {user.org.name}"[:60])
+    return render(request, "mfa.html", user, enrolled=False, secret=secret, qr=totp.qr_svg(uri))
+
+
+@router.post("/settings/mfa", dependencies=[Depends(csrf_protect)])
+async def mfa_change(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .. import totp
+    f = await request.form()
+    if f.get("action") == "enable":
+        secret = request.session.get("mfa_new")
+        step = totp.verify(secret, f.get("code", "")) if secret else None
+        if step is None:
+            return redirect("/settings/mfa", "That code didn't match. Check the time on your phone and try again.",
+                            request)
+        user.totp_secret, user.totp_last_step = totp.seal(secret), step
+        request.session.pop("mfa_new", None)
+        audit(db, user, "mfa_enabled")
+        db.commit()
+        return redirect("/settings", "Two-step sign-in is on.", request)
+    if f.get("action") == "disable":
+        secret = totp.unseal(user.totp_secret) if user.totp_secret else None
+        if not verify_password(f.get("password", ""), user.password_hash) or not secret or \
+                totp.verify(secret, f.get("code", ""), user.totp_last_step) is None:
+            return redirect("/settings/mfa", "Password or code didn't match. Two-step sign-in is still on.", request)
+        user.totp_secret, user.totp_last_step = None, None
+        audit(db, user, "mfa_disabled")
+        db.commit()
+        return redirect("/settings", "Two-step sign-in is off.", request)
+    return redirect("/settings/mfa")
+
+
+@router.post("/settings/users/{uid}/reset-mfa", dependencies=[Depends(csrf_protect)])
+def reset_mfa(uid: int, request: Request, user: User = Depends(admin), db: Session = Depends(get_db)):
+    target = db.get(User, uid)
+    if not target or target.org_id != user.org_id or target.id == user.id:
+        return redirect("/settings", "Can't change that account.", request)
+    target.totp_secret, target.totp_last_step = None, None
+    audit(db, user, "mfa_reset", target.email)
+    db.commit()
+    return redirect("/settings", f"Two-step sign-in reset for {target.email}. They can set it up again.", request)
 
 
 @router.post("/logout", dependencies=[Depends(csrf_protect)])
@@ -73,7 +156,12 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
     upcoming = sorted([x for x in statuses if x.due], key=lambda x: x.due)
     open_sessions = (db.query(AccessSession).filter_by(org_id=user.org_id, ended_at=None)
                      .order_by(AccessSession.started_at).all())
+    from ..models import AccessApproval, Signoff
+    requests_ = (db.query(AccessApproval).filter_by(org_id=user.org_id, status="Requested")
+                 .order_by(AccessApproval.starts_at).all())
+    my_signoffs = db.query(Signoff).filter_by(org_id=user.org_id, signer_id=user.id, status="Pending").all()
     return render(request, "dashboard.html", user, statuses=statuses, counts=summary_counts(statuses),
+                  access_requests=requests_, my_signoffs=my_signoffs,
                   s6=s6, upcoming=upcoming, open_sessions=open_sessions,
                   n_assets=db.query(Asset).filter_by(org_id=user.org_id).count(),
                   n_paths=db.query(VendorAccess).filter_by(org_id=user.org_id, status="Enabled").count())
@@ -81,7 +169,9 @@ def dashboard(request: Request, user: User = Depends(current_user), db: Session 
 
 @router.get("/settings")
 def settings(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    from .. import mailer, reminders
     return render(request, "settings.html", user, org=user.org, roles=ROLES,
+                  reminder_items=reminders.pending(db, user.org), mail_status=mailer.describe(),
                   users=db.query(User).filter_by(org_id=user.org_id).order_by(User.email).all(),
                   delegations=db.query(Delegation).filter_by(org_id=user.org_id)
                   .order_by(Delegation.effective_on.desc()).all())
@@ -92,9 +182,11 @@ async def save_org(request: Request, user: User = Depends(admin), db: Session = 
     f = await request.form()
     org = user.org
     before = org.cip_senior_manager
-    for k in ("name", "ncr_id", "regional_entity", "registered_functions", "cip_senior_manager"):
+    for k in ("name", "ncr_id", "regional_entity", "registered_functions", "cip_senior_manager", "audit_id"):
         setattr(org, k, s(f, k))
+    org.name = org.name or "My Utility"
     org.cip_senior_manager_since = d(f, "cip_senior_manager_since")
+    org.audit_period_start, org.audit_period_end = d(f, "audit_period_start"), d(f, "audit_period_end")
     if before != org.cip_senior_manager:
         audit(db, user, "cip_senior_manager_changed", f"{before or '—'} → {org.cip_senior_manager or '—'}")
     audit(db, user, "org_updated")
@@ -126,6 +218,37 @@ def toggle_user(uid: int, request: Request, user: User = Depends(admin), db: Ses
     audit(db, user, "user_" + ("enabled" if target.active else "disabled"), target.email)
     db.commit()
     return redirect("/settings")
+
+
+@router.post("/settings/users/{uid}/signer", dependencies=[Depends(csrf_protect)])
+def toggle_signer(uid: int, request: Request, user: User = Depends(admin), db: Session = Depends(get_db)):
+    target = db.get(User, uid)
+    if not target or target.org_id != user.org_id:
+        return redirect("/settings", "Can't change that account.", request)
+    target.can_sign = not target.can_sign
+    audit(db, user, "signer_" + ("granted" if target.can_sign else "removed"), target.email)
+    db.commit()
+    return redirect("/settings", f"{target.name} {'can now' if target.can_sign else 'can no longer'} sign.", request)
+
+
+@router.post("/settings/me", dependencies=[Depends(csrf_protect)])
+async def save_me(request: Request, user: User = Depends(current_user), db: Session = Depends(get_db)):
+    f = await request.form()
+    user.notify = f.get("notify") == "on"
+    if s(f, "name"):
+        user.name = s(f, "name")
+    audit(db, user, "account_updated", f"reminders {'on' if user.notify else 'off'}")
+    db.commit()
+    return redirect("/settings", "Your account was saved.", request)
+
+
+@router.post("/settings/reminders/send", dependencies=[Depends(csrf_protect)])
+def send_reminders(request: Request, user: User = Depends(admin), db: Session = Depends(get_db)):
+    from .. import reminders
+    r = reminders.send_due(db, user.org, base_url=str(request.base_url).rstrip("/"))
+    audit(db, user, "reminders_sent", f"{r['sent']} item(s), {r['messages']} message(s)")
+    db.commit()
+    return redirect("/settings", f"Sent {r['sent']} reminder item(s) in {r['messages']} message(s).", request)
 
 
 @router.post("/settings/delegations", dependencies=[Depends(csrf_protect)])

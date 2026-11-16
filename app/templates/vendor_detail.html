@@ -8,6 +8,10 @@
 <label>Contact</label><input type="text" name="contact" value="{{ v.contact or '' }}">
 <label>Services</label><textarea name="services">{{ v.services or '' }}</textarea>
 {% if user.role != 'viewer' %}<div class="actions"><button>Save</button></div>{% endif %}</form>
+<h3>Access-request portal</h3>
+<p class="small muted m0">{% if v.portal_token_hash %}Link active until {{ v.portal_expires }}. Creating a new one stops the old link.{% else %}Give the vendor a private link to request access windows instead of calling or emailing.{% endif %}</p>
+{% if user.role != 'viewer' %}<div class="actions"><form method="post" action="/vendors/{{ v.id }}/portal" class="inline">{{ csrf_field() }}<button class="secondary">{{ 'New link' if v.portal_token_hash else 'Create portal link' }}</button></form>
+{% if v.portal_token_hash %}<form method="post" action="/vendors/{{ v.id }}/portal" class="inline" data-confirm="Revoke the portal link?">{{ csrf_field() }}<input type="hidden" name="action" value="revoke"><button class="danger">Revoke link</button></form>{% endif %}</div>{% endif %}
 {% if user.role != 'viewer' %}<form method="post" action="/vendors/{{ v.id }}/delete" class="actions" data-confirm="Delete {{ v.name }} and all its access paths and session history?">{{ csrf_field() }}<button class="danger">Delete vendor</button></form>{% endif %}
 </div>
 <div><h2 class="mt0">Access paths</h2>

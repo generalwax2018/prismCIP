@@ -10,7 +10,7 @@ from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from .models import AccessSession, Asset, Evidence, Organization, Requirement, VendorAccess, utcnow
+from .models import AccessSession, Asset, Evidence, Finding, Organization, Requirement, VendorAccess, utcnow
 
 DUE_SOON_DAYS = 60
 RETENTION_YEARS = 3
@@ -81,6 +81,10 @@ def detect_gaps(db: Session, org: Organization) -> dict[str, list[str]]:
     for s in open_sessions:
         add("CIP-003 Att1 S6.2", f"Session by {s.vendor_person} on {s.access.asset.name} has been open "
                                  f"more than 24 hours.")
+    for x in (db.query(Finding).filter(Finding.org_id == org.id, Finding.status == "Open",
+                                       Finding.severity.in_(("high", "medium"))).all()):
+        if x.requirement_code:
+            add(x.requirement_code, f"Open finding: {x.title}")
     return gaps
 
 
@@ -88,12 +92,33 @@ def requirement_statuses(db: Session, org: Organization, today: date | None = No
     today = today or date.today()
     gaps = detect_gaps(db, org)
     out = []
-    for req in db.query(Requirement).order_by(Requirement.sort_order).all():
+    reqs = db.query(Requirement).order_by(Requirement.sort_order).all()
+    last_test = None
+    test_req = next((r for r in reqs if r.code == "CIP-003 Att1 S4.5"), None)
+    if test_req:
+        t = (db.query(Evidence).filter_by(org_id=org.id, requirement_id=test_req.id)
+             .order_by(Evidence.performed_on.desc()).first())
+        last_test = t.performed_on if t else None
+    for req in reqs:
         ev = (db.query(Evidence).filter_by(org_id=org.id, requirement_id=req.id)
               .order_by(Evidence.performed_on.desc()).all())
         last = ev[0].performed_on if ev else None
         st = ReqStatus(req=req, status="No evidence", last_performed=last, evidence_count=len(ev),
                        gaps=gaps.get(req.code, []))
+        if req.code == "CIP-003 Att1 S4.6":
+            # Event-driven: after a test, the plan update (if any is needed) is due within 180 calendar days.
+            if last_test and not (last and last >= last_test):
+                st.due = last_test + timedelta(days=180)
+                st.status = "Overdue" if today > st.due else "Due soon" if (st.due - today).days <= DUE_SOON_DAYS \
+                    else "Current"
+                st.gaps.append(f"Plan update (or a note that none was needed) after the {last_test} test is due by "
+                               f"{st.due}.")
+            elif last:
+                st.status = "Documented"
+            else:
+                st.status = "Documented" if not last_test else st.status
+            out.append(st)
+            continue
         if req.cadence_months and last:
             st.due = add_calendar_months_end(last, req.cadence_months)
             if today > st.due:

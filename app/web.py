@@ -12,8 +12,20 @@ templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 templates.env.globals["app_name"] = "PrismCIP"
 
 
+def nav_counts(user) -> dict:
+    if not user:
+        return {}
+    from .db import SessionLocal
+    from .models import Finding, Signoff
+    with SessionLocal() as db:
+        return {"open_findings": db.query(Finding).filter_by(org_id=user.org_id, status="Open").count(),
+                "my_signoffs": db.query(Signoff).filter_by(org_id=user.org_id, signer_id=user.id,
+                                                           status="Pending").count()}
+
+
 def render(request: Request, name: str, user=None, **ctx):
-    ctx.update(request=request, user=user, csrf=csrf_token(request), flash=request.session.pop("flash", None))
+    ctx.update(request=request, user=user, csrf=csrf_token(request), flash=request.session.pop("flash", None),
+               navc=nav_counts(user))
     return templates.TemplateResponse(request, name, ctx)
 
 

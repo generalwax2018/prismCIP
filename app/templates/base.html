@@ -3,37 +3,85 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="color-scheme" content="light dark">
 <title>{% block title %}{{ app_name }}{% endblock %} · {{ app_name }}</title>
 <link rel="stylesheet" href="/static/style.css">
 <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
 <script src="/static/app.js" defer></script>
 </head>
-<body>
-{% from "_macros.html" import csrf_field with context %}
+{% from "_macros.html" import csrf_field, icon with context %}
+{% set path_ = request.url.path %}
+{% macro nav(href, label, ic, match=None) -%}
+<a class="{{ 'on' if (path_ == href if match is none else path_.startswith(match)) }}" href="{{ href }}">{{ icon(ic) }}{{ label }}</a>
+{%- endmacro %}
 {% if user %}
-<header class="top">
-  <a class="brand" href="/"><span class="mark">◆</span> {{ app_name }}<small>{{ user.org.name }}</small></a>
-  <nav>
-    {% set path_ = request.url.path %}
-    <a href="/" class="{{ 'on' if path_ == '/' }}">Dashboard</a>
-    <a href="/assets" class="{{ 'on' if path_.startswith('/assets') }}">Assets</a>
-    <a href="/vendors" class="{{ 'on' if path_.startswith('/vendors') }}">Vendors</a>
-    <a href="/access" class="{{ 'on' if path_.startswith('/access') }}">Remote access</a>
-    <a href="/requirements" class="{{ 'on' if path_.startswith('/requirements') }}">Requirements</a>
-    <a href="/plan" class="{{ 'on' if path_ == '/plan' }}">Plan</a>
-    <a href="/export">Audit package</a>
-  </nav>
-  <div class="me">
-    <a href="/settings">Settings</a> · <a href="/activity">Activity</a> ·
-    <form method="post" action="/logout" class="inline">{{ csrf_field() }}<button class="link">Sign out</button></form>
+<body>
+<a class="skip btn" href="#main">Skip to content</a>
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="app" href="/"><span class="app-icon">{{ icon('diamond', 17, 2) }}</span><span class="app-name">{{ app_name }}</span><span class="app-sub">{{ user.org.name }}</span></a>
+    <nav class="segmented" aria-label="Views">
+      <a class="{{ 'on' if path_ == '/' }}" href="/">Dashboard</a>
+      <a class="{{ 'on' if path_.startswith('/requirements') }}" href="/requirements">Requirements</a>
+      <a class="{{ 'on' if path_.startswith('/access') }}" href="/access">Remote access</a>
+      <a class="{{ 'on' if path_.startswith('/findings') }}" href="/findings">Findings<span class="badge" data-n="{{ navc.open_findings or 0 }}">{{ navc.open_findings or 0 }}</span></a>
+      <a class="{{ 'on' if path_.startswith('/plan') }}" href="/plan">Plan</a>
+    </nav>
+    <div class="topbar-end"><a class="btn small-btn" href="/export">{{ icon('download', 15) }}Audit package</a></div>
   </div>
 </header>
-{% endif %}
-<main class="{% block main_class %}{% endblock %}">
-  {% if flash %}<div class="flash">{{ flash }}</div>{% endif %}
-  {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+<div class="shell">
+<aside class="rail" aria-label="More">
+  <section class="group">
+    <div class="group-title">Inventory</div>
+    <nav class="nav" aria-label="Inventory">
+      {{ nav('/assets', 'Assets', 'site', '/assets') }}
+      {{ nav('/vendors', 'Vendors', 'vendor', '/vendors') }}
+    </nav>
+  </section>
+  <section class="group">
+    <div class="group-title">Programs</div>
+    <nav class="nav" aria-label="Programs">
+      {{ nav('/programs/awareness', 'Awareness', 'megaphone') }}
+      {{ nav('/programs/exercise', 'IR exercises', 'target') }}
+      {{ nav('/programs/transient', 'Transient devices', 'usb') }}
+    </nav>
+  </section>
+  <section class="group">
+    <div class="group-title">Records</div>
+    <nav class="nav" aria-label="Records">
+      <a class="{{ 'on' if path_.startswith('/signoffs') }}" href="/signoffs">{{ icon('sign') }}Sign-offs<span class="badge rail-badge" data-n="{{ navc.my_signoffs or 0 }}">{{ navc.my_signoffs or 0 }}</span></a>
+      {{ nav('/rsaw', 'RSAW workbook', 'book', '/rsaw') }}
+      {{ nav('/activity', 'Activity log', 'log') }}
+    </nav>
+  </section>
+  <section class="group">
+    <div class="group-title">Admin</div>
+    <nav class="nav" aria-label="Admin">
+      {{ nav('/settings', 'Settings', 'gear') }}
+    </nav>
+  </section>
+  <div class="who">
+    <div class="muted small">Signed in as</div>
+    <div class="who-name">{{ user.name }}</div>
+    <div class="muted small">{{ user.role|capitalize }}</div>
+    <form method="post" action="/logout">{{ csrf_field() }}<button class="linkbtn">Sign out</button></form>
+  </div>
+</aside>
+<main class="main" id="main">
+  {% if flash %}<div class="flash" role="status">{{ flash }}</div>{% endif %}
+  {% if error %}<div class="flash err" role="alert">{{ error }}</div>{% endif %}
   {% block content %}{% endblock %}
+  <footer class="foot">PrismCIP is a compliance aid, not legal advice. Requirement summaries are paraphrased; check the current standards on nerc.com.</footer>
 </main>
-<footer class="foot">PrismCIP is a compliance aid, not legal advice. Requirement summaries are paraphrased; check the current standards on nerc.com.</footer>
+</div>
 </body>
+{% else %}
+<body class="login">
+<main id="main">
+  {% block bare %}{% endblock %}
+</main>
+</body>
+{% endif %}
 </html>

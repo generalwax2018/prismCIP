@@ -1,0 +1,35 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Import sessions{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/access">← Remote access</a></p>
+<header class="head"><div><h1>Import vendor sessions</h1>
+<p class="sub">Load VPN or remote-support logs. Each session is matched to a vendor access path by account name and checked against approved access windows. Anything without an approval becomes a finding.</p></div></header>
+{% if unmapped_paths %}<div class="flash err">{{ unmapped_paths }} access path(s) have no accounts listed, so their sessions can't be matched. Add the VPN usernames on each <a href="/access">access path</a>.</div>{% endif %}
+<div class="grid g2">
+<div class="card">
+<div class="card-head"><h2>Upload a log</h2></div>
+{% if user.role != 'viewer' %}
+<form method="post" enctype="multipart/form-data" class="stack">{{ csrf_field() }}
+<label>Format</label>
+<select name="format"><option value="auto">Detect automatically</option><option value="fortigate">FortiGate event log (syslog key=value)</option><option value="csv">CSV export (GlobalProtect, BeyondTrust, Secomea, …)</option></select>
+<label>File <span class="hint">.log, .txt or .csv · up to 20 MB</span></label><input type="file" name="file" required>
+<div class="actions"><button>{{ icon('upload', 15) }}Import</button></div>
+</form>
+{% else %}<p class="muted">Viewers can't import.</p>{% endif %}
+</div>
+<div class="card">
+<div class="card-head"><h2>What's understood</h2></div>
+<p class="small"><b>FortiGate:</b> SSL VPN and IPsec dial-up <span class="mono">tunnel-up</span> / <span class="mono">tunnel-down</span> events, paired by tunnel ID. Export from Log &amp; Report → VPN Events, or forward syslog.</p>
+<p class="small"><b>CSV:</b> any export with a user/account column and a start/login time column. End time and source IP are used when present.</p>
+<p class="small"><b>Automatic:</b> post logs to the API with a token from Settings:</p>
+<div class="code">curl -X POST -H "Authorization: Bearer pcip_…"   --data-binary @vpn-events.log   https://your-prismcip/api/v1/sessions</div>
+</div>
+</div>
+<h2 class="section-title">Recent imports</h2>
+{% if batches %}
+<table><tr><th>When (UTC)</th><th>Source</th><th>File</th><th>Records</th><th>New</th><th>Matched</th><th>Dupes</th><th>Findings</th></tr>
+{% for b in batches %}<tr><td class="mono">{{ b.at.strftime('%Y-%m-%d %H:%M') }}</td><td>{{ b.source }}</td><td class="small">{{ b.file_name or '—' }}<div class="muted mono">{{ (b.sha256 or '')[:12] }}</div></td>
+<td class="num">{{ b.records }}</td><td class="num">{{ b.sessions_new }}</td><td class="num">{{ b.sessions_matched }}</td><td class="num">{{ b.duplicates }}</td>
+<td class="num">{% if b.findings_new %}<a href="/findings">{{ b.findings_new }}</a>{% else %}0{% endif %}</td></tr>{% endfor %}</table>
+{% else %}<div class="card muted">No imports yet.</div>{% endif %}
+{% endblock %}

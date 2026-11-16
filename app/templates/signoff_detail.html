@@ -1,0 +1,28 @@
+{% extends "base.html" %}{% from "_macros.html" import csrf_field, pill, yn, icon with context %}
+{% block title %}Sign-off{% endblock %}
+{% block content %}
+<p class="small crumbs"><a href="/signoffs">← Sign-offs</a></p>
+<header class="head"><div><h1>{{ so.title }}</h1><p class="sub">{{ so.requirement.code if so.requirement else so.kind }} · requested by {{ so.requested_by }} on {{ so.requested_at.strftime('%Y-%m-%d %H:%M') }} UTC</p></div>
+<div>{{ pill(so.status, {'Approved':'ok','Pending':'warn','Rejected':'bad'}[so.status]) }}</div></header>
+<div class="grid g2">
+<div class="card"><div class="card-head"><h2>Document</h2></div>
+<dl class="kv"><dt>File</dt><dd><a href="/signoffs/{{ so.id }}/document">{{ so.file_name }}</a></dd>
+<dt>SHA-256</dt><dd class="mono small wrap-any">{{ so.sha256 }}</dd>
+<dt>Integrity</dt><dd>{{ pill('Unchanged since request', 'ok') if intact else pill('Changed or missing', 'bad') }}</dd>
+<dt>Signer</dt><dd>{{ so.signer.name }}</dd>
+{% if so.decided_at %}<dt>Decided</dt><dd>{{ so.decided_at.strftime('%Y-%m-%d %H:%M') }} UTC, signed as "{{ so.signature_name }}"</dd>{% endif %}
+{% if so.decision_note %}<dt>Note</dt><dd>{{ so.decision_note }}</dd>{% endif %}
+{% if so.evidence_id %}<dt>Evidence</dt><dd><a href="/requirements/{{ so.requirement_id }}">Filed under {{ so.requirement.code }}</a></dd>{% endif %}
+</dl></div>
+{% if can_decide %}
+<div class="card s6"><div class="card-head"><h2>Your decision</h2></div>
+<p class="small">Open the document and review it. Approving records your name, the time and the document's hash, and files the record as evidence.</p>
+<form method="post" action="/signoffs/{{ so.id }}/decide" class="stack">{{ csrf_field() }}
+<label>Type your full name: {{ user.name }}</label><input type="text" name="signature_name" required autocomplete="off">
+<label>Your password</label><input type="password" name="password" required autocomplete="current-password">
+<label>Note <span class="hint">optional</span></label><input type="text" name="note">
+<div class="actions"><button name="decision" value="approve">Approve and sign</button><button class="danger" name="decision" value="reject">Reject</button></div>
+</form></div>
+{% endif %}
+</div>
+{% endblock %}
